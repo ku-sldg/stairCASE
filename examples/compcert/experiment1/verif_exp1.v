@@ -1,3 +1,5 @@
+Require Import VST.floyd.forward.
+
 Require Import VST.floyd.proofauto. (* Import the Verifiable C system *) 
 Require Import exp1. (* Import the AST of this C program *) 
 (* The next line is "boilerplate", always required after importing an AST. *) 
@@ -57,7 +59,7 @@ Definition Gprog : funspecs :=
 (** Proof that f_sumarray, the body of the sumarray() function,
  ** satisfies sumarray_spec, in the global context (Vprog,Gprog).
  **)
-Lemma body_sumarray: semax_body Vprog Gprog f_mySum exp1_spec.
+Lemma body_mySum: semax_body Vprog Gprog f_mySum exp1_spec.
 Proof.
 start_function. (* Always do this at the beginning of a semax_body proof *)
 (* The next two lines do forward symbolic execution through
@@ -71,19 +73,30 @@ Proof.
 start_function.
 forward.
 forward.
-forward_call (*  s = sumarray(four,4); *)
-  (Vint (Int.repr 2), Vint (Int.repr 3) ,5).
- split3. auto. computable. repeat constructor; computable.
-forward. (* return s; *)
-Qed.
+forward_call (* provide a witness to the WITH clause of exp1_spec *)
+  (Vint (Int.repr 2), Vint (Int.repr 3), Ews ,5).
+Focus 2. split. auto. computable.
+Focus 2. forward.
+
+(* Not sure how to tackle this goal. *)
+Admitted.
 
 Existing Instance NullExtension.Espec.
+
+Locate semax_func.
 
 Lemma prog_correct:
   semax_prog prog Vprog Gprog.
 Proof.
-prove_semax_prog.
-semax_func_cons body_sumarray.
+prove_semax_prog. 
+Admitted. Abort.
+(*
+This proof fails here.
+It matches the example, though
+*)
+(*
+semax_func_cons body_mySum.
 semax_func_cons body_main.
-Qed.
+*)
+Abort.
 
