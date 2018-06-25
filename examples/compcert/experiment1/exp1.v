@@ -2,9 +2,9 @@ From Coq Require Import String List ZArith.
 From compcert Require Import Coqlib Integers Floats AST Ctypes Cop Clight Clightdefs.
 Local Open Scope Z_scope.
 
-Definition _A : ident := 55%positive.
-Definition _B : ident := 56%positive.
-Definition _C : ident := 57%positive.
+Definition _A : ident := 57%positive.
+Definition _B : ident := 58%positive.
+Definition _C : ident := 59%positive.
 Definition ___builtin_ais_annot : ident := 1%positive.
 Definition ___builtin_annot : ident := 8%positive.
 Definition ___builtin_annot_intval : ident := 9%positive.
@@ -57,16 +57,31 @@ Definition ___compcert_va_composite : ident := 18%positive.
 Definition ___compcert_va_float64 : ident := 17%positive.
 Definition ___compcert_va_int32 : ident := 15%positive.
 Definition ___compcert_va_int64 : ident := 16%positive.
-Definition _argc : ident := 53%positive.
-Definition _argv : ident := 54%positive.
-Definition _main : ident := 58%positive.
+Definition _main : ident := 60%positive.
+Definition _mySum : ident := 56%positive.
+Definition _x : ident := 53%positive.
+Definition _y : ident := 54%positive.
+Definition _z : ident := 55%positive.
+Definition _t'1 : ident := 61%positive.
+
+Definition f_mySum := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_x, tint) :: (_y, tint) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_z, tint) :: nil);
+  fn_body :=
+(Ssequence
+  (Sset _z (Ebinop Oadd (Etempvar _x tint) (Etempvar _y tint) tint))
+  (Sreturn (Some (Etempvar _z tint))))
+|}.
 
 Definition f_main := {|
   fn_return := tint;
   fn_callconv := cc_default;
-  fn_params := ((_argc, tint) :: (_argv, (tptr (tptr tschar))) :: nil);
+  fn_params := nil;
   fn_vars := nil;
-  fn_temps := ((_A, tint) :: (_B, tint) :: (_C, tint) :: nil);
+  fn_temps := ((_A, tint) :: (_B, tint) :: (_C, tint) :: (_t'1, tint) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
@@ -74,7 +89,12 @@ Definition f_main := {|
     (Ssequence
       (Sset _B (Econst_int (Int.repr 3) tint))
       (Ssequence
-        (Sset _C (Ebinop Oadd (Etempvar _A tint) (Etempvar _B tint) tint))
+        (Ssequence
+          (Scall (Some _t'1)
+            (Evar _mySum (Tfunction (Tcons tint (Tcons tint Tnil)) tint
+                           cc_default))
+            ((Etempvar _A tint) :: (Etempvar _B tint) :: nil))
+          (Sset _C (Etempvar _t'1 tint)))
         (Sreturn (Some (Etempvar _C tint))))))
   (Sreturn (Some (Econst_int (Int.repr 0) tint))))
 |}.
@@ -333,10 +353,10 @@ Definition global_definitions : list (ident * globdef fundef type) :=
                      {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|}))
      (Tcons tint Tnil) tvoid
      {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})) ::
- (_main, Gfun(Internal f_main)) :: nil).
+ (_mySum, Gfun(Internal f_mySum)) :: (_main, Gfun(Internal f_main)) :: nil).
 
 Definition public_idents : list ident :=
-(_main :: ___builtin_debug :: ___builtin_nop ::
+(_main :: _mySum :: ___builtin_debug :: ___builtin_nop ::
  ___builtin_write32_reversed :: ___builtin_write16_reversed ::
  ___builtin_read32_reversed :: ___builtin_read16_reversed ::
  ___builtin_fnmsub :: ___builtin_fnmadd :: ___builtin_fmsub ::
