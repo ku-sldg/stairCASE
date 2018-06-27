@@ -2,16 +2,13 @@
 // 22/6/18
 //tiny program for use in the VST
 
-int mySum(int x, int y)
+int myId(int x)
 {
-    int z = x + y;
-    return z;
+    return x;
 }
 
 int main(void)
 {
     int A = 2;
-    int B = 3;
-    int C = mySum( A, B );
-    return C;
+    return myId( A );
 }
