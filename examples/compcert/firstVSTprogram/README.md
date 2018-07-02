@@ -28,5 +28,24 @@
 > `Require Import exp1.`  
 9. Perform verifcations over exp1.v.  
 > see `verif_exp1.v`  
+> can't conclude the final proof, for some raisin.  
 
+## Take 2
+> Let's do something even *simpler* than before.  
+> Must we literally have a main function?  
+>> Yes.  
+
+## Take 3
+> Let's just literally only return 0.  
+> Okay, even with a dead simple program, I can't complete the "prog correct" proof.  
+> Fine, then let's just reverse engineer a working example.  
+> I'll pull parts out until it breaks.  
+
+## Take 4 : progs/sum_array
+> Ah ha!  
+> In replicate the steps for this file, I encountered a new error.  
+> After doing a `clightgen $1; ccoqc $1`, the verif proofs did *not* work.  
+> I suspect this has to do with my version of clightgen.  
+> That is, I think my compcert version is so different from that used in the vst examples that mine breaks the toolchain.  
+> So, what version should I have, instead?  
 

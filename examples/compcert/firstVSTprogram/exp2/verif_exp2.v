@@ -1,6 +1,6 @@
 Require Import VST.floyd.forward.
 Require Import VST.floyd.proofauto. (* Import the Verifiable C system *) 
-Require Import exp1. (* Import the AST of this C program *) 
+Require Import exp2. (* Import the AST of this C program *) 
 (* The next line is "boilerplate", always required after importing an AST. *) 
 Instance CompSpecs : compspecs. make_compspecs prog. Defined. 
 Definition Vprog : varspecs.  mk_varspecs prog. Defined. 
@@ -44,6 +44,7 @@ Definition myId_spec : ident * funspec :=
 
 
 (* The precondition of "int main(void){}" always looks like this. *)
+(*
 Definition main_spec :=
  DECLARE _main
   WITH gv : globals
@@ -52,10 +53,10 @@ Definition main_spec :=
      PROP() 
      LOCAL (temp ret_temp (Vint (Int.repr (2)))) 
      SEP(TT).
-
+*)
 (* Packaging the API spec all together. *)
 Definition Gprog : funspecs :=
-        ltac:(with_library prog [myId_spec; main_spec]).
+        ltac:(with_library prog [myId_spec(*; main_spec*)]).
 
 Lemma body_myId: semax_body Vprog Gprog f_myId myId_spec.
 Proof.
@@ -63,6 +64,7 @@ start_function. (* Always do this at the beginning of a semax_body proof *)
 forward.
 Qed.
 
+(*
 Lemma body_main:  semax_body Vprog Gprog f_main main_spec.
 Proof.
 start_function.
@@ -71,16 +73,15 @@ forward_call (* provide a witness to the WITH clause of exp1_spec *)
   (Vint (Int.repr 2), 2).
 forward.
 Qed.
+*)
 
 Existing Instance NullExtension.Espec.
-
-Locate semax_func.
 
 Lemma prog_correct:
   semax_prog prog Vprog Gprog.
 Proof.
 prove_semax_prog.
-semax_func_main body_myId.
+semax_func_cons body_myId.
 semax_func_cons body_main.
 Qed.
 
