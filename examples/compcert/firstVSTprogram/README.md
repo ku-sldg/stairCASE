@@ -49,3 +49,23 @@
 > That is, I think my compcert version is so different from that used in the vst examples that mine breaks the toolchain.  
 > So, what version should I have, instead?  
 
+## Retreat, regroup
+> Alright, so compcert is fine and dandy.  
+> However, a new vst compatible with the compcert I have was released in late June.  
+> Get that built and ready, and then we'll try again.  
+
+## Take 5 (aka take 3, subtake 2)
+> Can we get this "return 0" program verified?  
+> Well, the update didn't help  
+> I've determined the sumarray.v and sumarray.vo files I produce are different than those included in vst.  
+> Thus, my `clightgen -normalize` command does *not* produce the intended output.  
+
+## Try rebuild clightgen, compare differences
+> `diff` returns dozens of lines of differences.  
+> However, it works!  
+> See exp3 for the working copy.  
+
+
+
+
+
