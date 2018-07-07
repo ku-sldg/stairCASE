@@ -26,5 +26,11 @@
 
 > anything *worth your time* is a val  
 >> every val is a definition, which is something that can be saved.  
->> sometimes we do a `val _ =`, because we don't care to give the thing a name, like in the case of creating a new Datatype (see Datatype syntax in test.sml).  
+>> sometimes we do a `val _ =`, because we don't care to give the thing a name, like in the case of creating a new Datatype.  
 
+## notes on usage
+> to use the Run command, highlight the entire region  
+> to use the Goal command, place cursor in the \`backticks\`  
+> to employ a tactic, either highlight the tactic or place the cursor at the end of the line in which the tactic resides  
+> you can Print goal and Drop goal from anywhere, but if the goal stack is empty, you might get an error, which is no prob.  
+>> the hol buffer is cluttered. That is, too much is printed in a space too little, it's not easy to differentiate when a new message begins. They all just kinda bleed into each other.  
