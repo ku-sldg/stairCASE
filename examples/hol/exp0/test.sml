@@ -1,0 +1,90 @@
+(* Begin boiler plate *)
+open HolKernel boolLib bossLib Parse
+val _ = new_theory "mytree";
+(* End boiler plate *)
+
+open arithmeticTheory listTheory;
+
+` !n. n<n+1 `
+decide_tac
+
+val LESS_ADD_1 = Q.store_thm("LESS_ADD_1",`!n.n<n+1`, decide_tac);
+
+`!n:num.n<=n*n`
+>- decide_tac
+
+(* how to save proofs using many tactics*)
+(* want to save this one: *)
+`!n. n<=n*n`
+Induct_on `n`
+decide_tac
+asm_simp_tac bool_ss [MULT]
+decide_tac
+
+(* this doesn't work
+val LESS_EQ_MULT = Q.prove(
+    `!n:num. n <= n * n`,
+    Induct_on `n`
+    >- decide_tac
+    >- (asm_simp_tac bool_ss [MULT]
+       >> decide_tac));
+*)
+
+(* function syntax *)
+val SQUARE_def = Define `SQUARE n = n * n`;
+
+(* i want syntax coloring *)
+
+(* Datatype syntax *)
+val _ = Datatype `TREE = LEAF 'a | BRANCH TREE TREE`;
+
+(* recursive functions *)
+val MAP_TREE_def = Define `
+    (MAP_TREE f (LEAF n) = LEAF (f n)) /\
+    (MAP_TREE f (BRANCH u v) = BRANCH (MAP_TREE f u) (MAP_TREE f v))`;
+
+(* fetch relevant theorems *)
+val TREE_11 = fetch "-" "TREE_11";
+val TREE_distinct = fetch "-" "TREE_distinct";
+
+(* some automated example proofs *)
+
+(* metis_tac is a first order prover that needs supplied relevant theorems *)
+val example1 = Q.prove(`!k. 0<k ==> !m pn. (m MOD k * p + n) MOD k = (m * p + n) MOD k`, metis_tac [MOD_TIMES2, MOD_MOD, MOD_PLUS]);
+
+(* decide_tac for linear arithmetic over natural numbers *)
+val example2 = Q.prove(`!m n k. m < n /\ n < m+k /\ k <= 3 /\ ~(n = m+1) ==> (n = m+2)`, decide_tac);
+
+(* EVAL_TAC for fully instantiated goals *)
+val example3 = Q.prove(`0 < 5 /\ (HD [4;5;6;7] + 2**32 = 3500 DIV 7 + 4294966800)`, EVAL_TAC)
+
+(* how to do induction *)
+`!x. x < x+1`
+Induct_on `x`
+decide_tac
+decide_tac
+
+(* how to do induction: director's cut *)
+val myInduction = Q.prove( `!x. x<x+1`, Induct_on `x` >- decide_tac >- decide_tac);
+
+(* how to split a goal into cases *)
+`!x. ~(x = []) ==> (x = HD x::TL x)`
+Cases_on `x`
+decide_tac
+
+(* start a subproof *)
+sg `h n = g n`
+
+(* some proof stripping *)
+
+`!x. (!z. x < h z) ==> ?y. f x = y`
+rpt strip_tac
+
+`?n. !k. n * k = k`
+qexists_tac `1`
+decide_tac
+
+
+
+(* Begin boiler plate *)
+val _ = export_theory();
