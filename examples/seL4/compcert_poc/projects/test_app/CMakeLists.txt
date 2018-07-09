@@ -25,8 +25,8 @@ set_source_files_properties(test_app PROPERTIES GENERATED TRUE)
 add_custom_command(
     OUTPUT main.o
     COMMAND ccomp ${includes} -c ${deps}
-    DEPENDS sel4 muslc utils sel4muslcsys sel4platsupport sel4utils sel4debug
-    COMMENT Custom command running
+    DEPENDS ${libs}
+    COMMENT CompCert custom command...
     VERBATIM)
 # Libraries to be built before
 add_dependencies(test_app ${libs})
