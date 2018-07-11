@@ -2,15 +2,25 @@
 
 ## Prerequisites
 
-Dependencies for building sel4 and associated projects are described here: https://docs.sel4.systems/HostDependencies.
+Dependencies for building sel4 and associated projects are described here: https://docs.sel4.systems/HostDependencies. You will also need to install CompCert for the compcert_poc project (for instructions, see our [CompCert wiki](https://github.com/ku-sldg/CAPTools/wiki/crossCompiling)).
 
 ## test_app
 
 This project is intended to be a barebones application on the sel4 microkernel to serve as a starting point for larger projects and to demonstrate the basic project layout and build system of sel4. It is a simple "Hello World!" application.
 
+## compcert_poc
+
+This is a proof of concept of mixed CompCert/gcc compilation of a sel4 project. It is the same "Hello World!" app from test_app, but with a modified project/test_app/CMakeLists.txt to adjust the build process of our app. Everything is built with gcc as in other projects, except for main.c which is compiled with CompCert.
+
+As of now, there are two issues with CompCert on SeL4. One, CMake has poor support for multiple compilers. You can circumvent the problem with custom commands, but this resulted in the awkward situation of having to manually add directories CompCert should search when looking for included header files. Two, CompCert works on a subset of c which the SeL4 kernel and libraries may not adhere to. Ideally this would not be an issue since we can write our userland SeL4 applications in CompCert c, and then simply link it against a bunch of gcc extended c. However, our applications must connect to SeL4 libraries through included header files, which may not always be within CompCert's subset of c.
+
+In this specific example, util.c is compiled with gcc because it pulls in a header file which [specifies register variables](https://gcc.gnu.org/onlinedocs/gcc/Local-Register-Variables.html), a feature supported by gcc but not CompCert as far as I can tell.
+
 ### Build Instructions
 
-This project, like other sel4 projects, uses Google's "repo" tool for managing multiple remote repositories. The manifest file (default.xml) describes each remote repository and the desired project layout, and the repo tool fetches them for us. This way, we always get the current master branch of seL4 and its libraries without adding them to our own repositories and manually updating them.
+The following instructions apply to both projects.
+
+These projects, like other sel4 projects, uses Google's "repo" tool for managing multiple remote repositories. The manifest file (default.xml) describes each remote repository and the desired project layout, and the repo tool fetches them for us. This way, we always get the current master branch of seL4 and its libraries without adding them to our own repositories and manually updating them.
 
 To download our remote repositories, navigate to the directory which contains "default.xml", i.e. our test_app folder. Repo expects the manifest file to be at the top level of a git repository for some reason, so create an empty git repository with `git init` and then add the manifest file: `git add default.xml; git commit`. Now when you type `repo init -u ./` followed by `repo sync`, it will find that local manifest file and download our remote repositories accordingly.
 
@@ -20,5 +30,5 @@ Unfortunately, the ODROID is not supported by QEMU, but if you wish to build an 
 
 ## Deploying to the ODROID-XU4
 
-See the following wiki page: 
+See the following wiki page:
 https://github.com/ku-sldg/stairCASE/wiki/Deploying-to-the-ODROID-XU4
