@@ -34,3 +34,10 @@
 > and hence I've decided that these are no good  
 > I don't know why they aren't just signed nats  
 > pretty sure that would be an easy monad thing to do.  
+
+### hm
+> I gave it a shot, defining integers as signed nats,  
+> but things didn't work out as I planned.  
+> I encountered a problem I've met before.  
+> In a definition, I am for some reason disallowed from matching on a Prop.  
+>> I'm sure there's a good raisin for this, but I'm left confused.  
