@@ -50,6 +50,8 @@
 ## final remarks
 > This sort of verification is surprisingly not that difficult,  
 >> but dang the proofs are nearly opaque.  
+>> Although, let's be honest, machine proofs are in general opaque.  
+>> Not needing to understand the process is kind of the selling point.  
 
 > I think an effective proofing strategy here is to develop code and proof side-by-side.  
 >> In these experiments, I developed the final little program in many iterations.  
@@ -57,4 +59,4 @@
 >>> I also learned a fair amount about how the system works.
 
 > Conversely, I think writing a big algorithm and *then* attempting to prove it is suicide.  
->> sure I'm a novice, but dang I don't recommend that
+>> sure I'm a novice, but dang I don't recommend that to anyone.  
