@@ -36,5 +36,25 @@
 > Invariant used:
 >> 0 <= loop <= 1, and a couple "temp" variables exist
 
-### exp3 : conditional inside while loop
->
+### exp4 : conditional inside while loop
+> that was easy enough.  
+> something I'm curious about are the post-conditions one is supposed to supply to `forward_if` and `forward_while`.  
+> In particular, it almost seems like I can assert whatever I want in the `LOCAL` section.  
+>> so I wonder, what exactly am I verifying?  
+>> when I claim that result=0, is that checked? or is it a guarantee I... promise?  
+
+### exp4.1 : assert a false result value
+> In the loop (and seperately the conditional) invariant, I changed the assertion to result=1.  
+> The previously completed proof failed catastrophically, which is reassuring.  
+
+## final remarks
+> This sort of verification is surprisingly not that difficult,  
+>> but dang the proofs are nearly opaque.  
+
+> I think an effective proofing strategy here is to develop code and proof side-by-side.  
+>> In these experiments, I developed the final little program in many iterations.  
+>> That way, I was never terribly overwhelmed.
+>>> I also learned a fair amount about how the system works.
+
+> Conversely, I think writing a big algorithm and *then* attempting to prove it is suicide.  
+>> sure I'm a novice, but dang I don't recommend that
