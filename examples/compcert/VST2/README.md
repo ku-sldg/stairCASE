@@ -47,6 +47,16 @@
 > In the loop (and seperately the conditional) invariant, I changed the assertion to result=1.  
 > The previously completed proof failed catastrophically, which is reassuring.  
 
+### exp5 : for loop
+> for simple for loops (ie, those with integer upper bounds), use `forward_for_simple_bound N inv`.  
+> the statement of the invariant is key here.  
+>> the proof is perhaps impossible without a sufficiently strong invariant.  
+
+> at the end of the `forward_for...` call, there is a `%assert` that I don't understand.  
+>> the tactic executes with or without it...  
+>> the proof is successful with or without it...  
+>> ...i guess i'll keep it there...
+
 ## final remarks
 > This sort of verification is surprisingly not that difficult,  
 >> but dang the proofs are nearly opaque.  
@@ -55,8 +65,8 @@
 
 > I think an effective proofing strategy here is to develop code and proof side-by-side.  
 >> In these experiments, I developed the final little program in many iterations.  
->> That way, I was never terribly overwhelmed.
->>> I also learned a fair amount about how the system works.
+>> That way, I was never terribly overwhelmed.  
+>>> I also learned a fair amount about how the system works.  
 
 > Conversely, I think writing a big algorithm and *then* attempting to prove it is suicide.  
 >> sure I'm a novice, but dang I don't recommend that to anyone.  
