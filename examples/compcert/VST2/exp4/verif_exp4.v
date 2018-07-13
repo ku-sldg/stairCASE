@@ -44,7 +44,6 @@ Proof.
 start_function.
 repeat forward.
 (* start the WHILE *)
-hint.
 forward_while ( EX loop : Z, PROP ( 0<= loop <= 1 ) LOCAL ( temp _result (Vint(Int.repr 0)); temp _loop (Vint(Int.repr loop)) ) SEP (  ) ).
 - entailer.  Exists 1. entailer!. 
 - entailer!.
