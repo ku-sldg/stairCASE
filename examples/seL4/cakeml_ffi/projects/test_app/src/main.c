@@ -25,7 +25,8 @@ void main_func(void);
 int main(void) {
     printf("Jumping into cakeml land...\n");
     main_func();
-    //CakeML doesn't seem to ever return from its main entry point.
-    printf("Back in c land.\n");
+    // CakeML doesn't ever return from its main entry point.
+    // Instead, it calls cml_exit in basis_ffi.c
+    printf("Back in c land. This code is not reachable.\n");
     return 0;
 }

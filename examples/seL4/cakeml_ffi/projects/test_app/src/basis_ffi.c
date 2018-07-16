@@ -18,6 +18,7 @@ void ffifoo(unsigned char *c, long clen, unsigned char *a, long alen) {
 }
 
 void cml_exit(int arg) {
+  printf("Cakeml finished, now in cml_exit subroutine in basis_ffi.c\n");
   exit(arg);
 }
 
