@@ -1,0 +1,12 @@
+(* Factorial function *)
+fun fact n = if n = 0 then 1 else n * fact (n-1);
+
+(* Puts 4! into a string *)
+val str = Int.toString (fact 4);
+
+(* Empty word8array because ffi calls seem to require it *)
+val dummyarr = Word8Array.array 0 (Word8.fromInt 0);
+
+(* Call to ffifoo in basis_ffi.c. The first param seems to have to be a string
+   and the second a word8array *)
+#(foo) str dummyarr;

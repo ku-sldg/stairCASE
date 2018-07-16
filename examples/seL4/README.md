@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Dependencies for building sel4 and associated projects are described here: https://docs.sel4.systems/HostDependencies. You will also need to install CompCert for the compcert_poc project (for instructions, see our [CompCert wiki](https://github.com/ku-sldg/CAPTools/wiki/crossCompiling)).
+Dependencies for building sel4 and associated projects are described here: https://docs.sel4.systems/HostDependencies. You will also need to install CompCert for the compcert_poc project (for instructions, see our [CompCert wiki](https://github.com/ku-sldg/CAPTools/wiki/crossCompiling)), and the CakeML compiler for the cakeml_ffi project. Make sure both of these are in your system path. Also, make sure to download the 32 bit target version of the CakeML compiler, since we are building for armv7, a 32bit architecture. Rename it to "cake32".
 
 ## test_app
 
@@ -16,9 +16,13 @@ As of now, there are two issues with CompCert on SeL4. One, CMake has poor suppo
 
 In this specific example, util.c is compiled with gcc because it pulls in a header file which [specifies register variables](https://gcc.gnu.org/onlinedocs/gcc/Local-Register-Variables.html), a feature supported by gcc but not CompCert as far as I can tell.
 
+## cakeml_ffi
+
+This is a demonstration of cakeml integration into sel4, and calls from cakeml to custom functions in basis_ffi.c (no HOL tinkering required!). The functions we add to basis_ffi.c must follow a couple conventions for them to be callable from cakeml. First, they must begin with "ffi", e.g. a function `ffifoo` in basis_ffi.c is called with `#(foo)` from cakeml. Second, the c function's parameters must match ...
+
 ### Build Instructions
 
-The following instructions apply to both projects.
+The following instructions apply to every project.
 
 These projects, like other sel4 projects, uses Google's "repo" tool for managing multiple remote repositories. The manifest file (default.xml) describes each remote repository and the desired project layout, and the repo tool fetches them for us. This way, we always get the current master branch of seL4 and its libraries without adding them to our own repositories and manually updating them.
 
