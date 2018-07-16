@@ -15,7 +15,7 @@ set_source_files_properties(cake.S PROPERTIES GENERATED TRUE)
 add_custom_command(
     OUTPUT cake.S
     COMMAND cake32 --exclude-prelude=true --heap_size=50 --stack_size=50 < ${cml} > cake.S
-    COMMAND sed -i "s/cdecl(main)/cdecl(main_func)/g" "cake.S"
+    COMMAND sed -i "s/cdecl(main)/cdecl(cml_entry)/g" "cake.S"
     DEPENDS ${libs}
     VERBATIM)
 # Libraries to be built before

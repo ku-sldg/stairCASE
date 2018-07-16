@@ -17,14 +17,19 @@
 #include <sel4utils/sel4_zf_logif.h>
 
 
-extern unsigned int argc;
-extern char **argv;
+//extern unsigned int argc;
+//extern char **argv;
 
-void main_func(void);
+void cml_entry(void);
 
 int main(void) {
     printf("Jumping into cakeml land...\n");
-    main_func();
+    // CakeMl is compiled with an entry point named "main" in the assembly.
+    // Obviously this would conflict with our main function here. Therefore,
+    // when we compile our cakeml, we cut and paste its "main" entry point
+    // with our own name. In this case, we use "cml_entry" as the name.
+    // See test_app/CMakeLists.txt
+    cml_entry();
     // CakeML doesn't ever return from its main entry point.
     // Instead, it calls cml_exit in basis_ffi.c
     printf("Back in c land. This code is not reachable.\n");
