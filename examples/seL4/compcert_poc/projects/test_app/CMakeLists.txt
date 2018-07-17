@@ -43,6 +43,7 @@ if(SIMULATION)
     GenerateSimulateScript()
 else()
     set(KernelARMPlatform "exynos5422" CACHE STRING "" FORCE)
+    set(KernelMaxNumBootinfoUntypedCaps "500" CACHE STRING "" FORCE) # stops sel4 from whining about "Too many untyped regions for boot info" by doubling the default max
 endif()
 
 # we want to use the kernel debug putchar if it exists
