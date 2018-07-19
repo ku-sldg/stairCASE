@@ -6,7 +6,6 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <assert.h>
-#include <stdio.h>
 
 // Internal helper function, not exposed to cakeml. Used by ffifoo.
 // Copies string `from` into `to`, checking against length of `to`.
