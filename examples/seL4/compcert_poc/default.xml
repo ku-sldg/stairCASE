@@ -22,6 +22,8 @@
     </project>
     <project name="seL4_tools" path="projects/tools">
         <linkfile src="cmake-tool" dest="tools/cmake-tool"/>
+        <linkfile src="cmake-tool/init-build.sh" dest="init-build"/>
+        <linkfile src="cmake-tool/default-CMakeLists.txt" dest="CMakeLists.txt"/>
         <linkfile src="common-tool" dest="tools/common"/>
         <linkfile src="elfloader-tool" dest="tools/elfloader"/>
     </project>
