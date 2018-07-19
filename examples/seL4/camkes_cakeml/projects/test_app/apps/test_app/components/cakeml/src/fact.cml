@@ -1,0 +1,17 @@
+(* Factorial function *)
+fun fact n = if n = 0 then 1 else n * fact (n-1);
+
+(* Puts 4! into a string *)
+val inStr = Int.toString (fact 4);
+(* Initialize empty word8array of length 256 to act as our return value *)
+val outStr = Word8Array.array 256 (Word8.fromInt 0);
+
+(* Call to ffifoo in basis_ffi.c. The first param seems to have to be a string
+   and the second a word8array *)
+#(foo) inStr outStr;
+
+(* Convert the return of the last ffifoo call to a string *)
+val inStr2 = Word8Array.substring outStr 0 256;
+
+(* Call ffifoo with the previous return value as the argument*)
+#(foo) inStr2 outStr;
