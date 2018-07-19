@@ -8,7 +8,6 @@ Definition Vprog : varspecs.  mk_varspecs prog. Defined.
 (* Begin Functional spec of this program *)
 
 (* array of round constants *)
-
 (*
 Definition round_constants := [
 	0x428a2f98; 0x71374491; 0xb5c0fbcf; 0xe9b5dba5; 0x3956c25b; 0x59f111f1; 0x923f82a4; 0xab1c5ed5;
@@ -22,8 +21,6 @@ Definition round_constants := [
 ].
 *)
 (* dang, coq can't deal with these hexadecimals *)
-
-
 Definition round_constants := [
  1116352408; 1899447441; 3049323471; 3921009573; 961987163; 1508970993; 2453635748; 2870763221;
  3624381080; 310598401; 607225278; 1426881987; 1925078388; 2162078206; 2614888103; 3248222580;
@@ -35,53 +32,54 @@ Definition round_constants := [
  1955562222; 2024104815; 2227730452; 2361852424; 2428436474; 2756734187; 3204031479; 3329325298
 ].
 
-
 (* struct : buffer_state *)
+(* see vst/progs/verif_nest3.v *)
+Definition t_struct_buffer_state := Tstruct _buffer_state noattr.
 
 (* right rotation function *)
 Definition right_rot_spec : ident * funspec :=
   DECLARE _right_rot
-    WITH x:val, ret:Z
+    WITH valuev:val, countv:val, countz:Z
     PRE [ _value OF tint, _count OF tint ]
-      PROP ( x = Vint( Int.repr ret ) )
-      LOCAL ( temp _value x )
+      PROP ( 0 < countz < 32; countv = Vint( Int.repr countz)  )
+      LOCAL ( temp _value valuev; temp _count countv )
       SEP ()
     POST [ tint ]
-      PROP () LOCAL( temp ret_temp ( Vint (Int.repr ret) ) ) SEP ().
+      PROP () LOCAL(  ) SEP ().
 
 (* init buffer state function *)
 Definition init_buf_state_spec : ident * funspec:=
   DECLARE _init_buf_state
-    WITH x:val, ret:Z
-    PRE [ _value OF tint, _count OF tint ]
-      PROP ( x = Vint( Int.repr ret ) )
-      LOCAL ( temp _value x )
+    WITH statev:val, inputv:val, lenv:val
+    PRE [ _state OF tint, _input OF tint, _len OF tint ]
+      PROP (  )
+      LOCAL (  )
       SEP ()
     POST [ tint ]
-      PROP () LOCAL( temp ret_temp ( Vint (Int.repr ret) ) ) SEP ().
+      PROP () LOCAL() SEP ().
 
 (* calc_chunk function *)
 Definition calc_chunk_spec : ident * funspec:=
   DECLARE _calc_chunk
-    WITH x:val, ret:Z
-    PRE [ _value OF tint, _count OF tint ]
-      PROP ( x = Vint( Int.repr ret ) )
-      LOCAL ( temp _value x )
+    WITH chunkArrv:val, statev:val, ret:Z
+    PRE [ _chunk OF tint, _state OF tint ]
+      PROP (  )
+      LOCAL (  )
       SEP ()
     POST [ tint ]
-      PROP () LOCAL( temp ret_temp ( Vint (Int.repr ret) ) ) SEP ().
+      PROP () LOCAL() SEP ().
 
 
 (* calc_sha_256 function *)
 Definition calc_sha_256_spec : ident * funspec:=
   DECLARE _calc_sha_256
-    WITH x:val, ret:Z
-    PRE [ _value OF tint, _count OF tint ]
-      PROP ( x = Vint( Int.repr ret ) )
-      LOCAL ( temp _value x )
+    WITH hashArrv:val, inputv:val, lenv:val, ret:Z
+    PRE [ _hash OF tint, _input OF tint, _len OF tint ]
+      PROP (  )
+      LOCAL (  )
       SEP ()
     POST [ tint ]
-      PROP () LOCAL( temp ret_temp ( Vint (Int.repr ret) ) ) SEP ().
+      PROP () LOCAL() SEP ().
 
 (* Examples *)
 (*
@@ -109,12 +107,29 @@ Qed.
 Definition Gprog : funspecs :=
         ltac:(with_library prog [right_rot_spec; init_buf_state_spec; calc_chunk_spec; calc_sha_256_spec]).
 
-Lemma body_right_rot: semax_body Vprog Gprog f_right_rot right_rot_spec.
+Lemma ZisInt: forall x:Z, x = Int.Z_mod_modulus x.
 Proof.
 Admitted.
+(* I feel like there is a legit way to do this *)
+Lemma intIsInt: forall x:Z, x = Int.unsigned (Int.repr x).
+Proof.
+intros x.
+unfold Int.unsigned. simpl.
+apply ZisInt.
+Qed.
+
+Lemma body_right_rot: semax_body Vprog Gprog f_right_rot right_rot_spec.
+Proof.
+start_function.
+forward.
+- entailer!. split.
+* intuition.
+* intuition. unfold Int.iwordsize. unfold Int.zwordsize. unfold Int.wordsize. unfold Wordsize_32.wordsize. simpl. rewrite <- intIsInt. omega.
+Qed.
 
 Lemma body_init_buf_state: semax_body Vprog Gprog f_init_buf_state init_buf_state_spec.
 Proof.
+start_function.
 Admitted.
 
 Lemma body_calc_chunk: semax_body Vprog Gprog f_calc_chunk calc_chunk_spec.
