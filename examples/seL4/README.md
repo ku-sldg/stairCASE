@@ -20,6 +20,10 @@ In this specific example, util.c is compiled with gcc because it pulls in a head
 
 This is a demonstration of cakeml integration into sel4, and calls from cakeml to custom functions in basis_ffi.c (no HOL tinkering required!). The functions we add to basis_ffi.c must follow a couple conventions for them to be callable from cakeml. First, they must begin with "ffi", e.g. a function `ffifoo` in basis_ffi.c is called with `#(foo)` from cakeml. Second, the c function's parameters must match some predetermined specs (look at basis_ffi to see what I'm talking about). From the cakeml side, we have to call the ffi function with a string and a word8array argument.
 
+## camkes_cakeml
+
+This is the cakeml_ffi project, now built into CAmkES. Other example projects have been done directly on top of seL4 because the build system is simpler. Ultimately, however, we wish to support CAmkES as a means of organizing large, multi-component, seL4 projects.
+
 ### Build Instructions
 
 The following instructions apply to every project.

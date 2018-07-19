@@ -1,0 +1,7 @@
+import "components/cakeml/cakeml.camkes";
+
+assembly {
+  composition {
+    component cakeml c;
+  }
+}
