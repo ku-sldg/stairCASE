@@ -40,22 +40,22 @@ Definition t_struct_buffer_state := Tstruct _buffer_state noattr.
 Definition right_rot_spec : ident * funspec :=
   DECLARE _right_rot
     WITH valuev:val, countv:val, countz:Z
-    PRE [ _value OF tint, _count OF tint ]
+    PRE [ _value OF tuint, _count OF tuint ]
       PROP ( 0 < countz < 32; countv = Vint( Int.repr countz)  )
       LOCAL ( temp _value valuev; temp _count countv )
       SEP ()
-    POST [ tint ]
+    POST [ tuint ]
       PROP () LOCAL(  ) SEP ().
 
 (* init buffer state function *)
 Definition init_buf_state_spec : ident * funspec:=
   DECLARE _init_buf_state
-    WITH statev:val, inputv:val, lenv:val
-    PRE [ _state OF tint, _input OF tint, _len OF tint ]
-      PROP (  )
-      LOCAL (  )
+    WITH statev:val, inputv:val, lenv:val, lenz:Z
+    PRE [ _state OF tptr t_struct_buffer_state, _input OF tptr tvoid, _len OF tuint ]
+      PROP ( 0<lenz<2^32; lenv = Vint(Int.repr lenz) )
+      LOCAL ( temp _state statev; temp _input inputv; temp _len lenv )
       SEP ()
-    POST [ tint ]
+    POST [ tvoid ]
       PROP () LOCAL() SEP ().
 
 (* calc_chunk function *)
@@ -130,6 +130,7 @@ Qed.
 Lemma body_init_buf_state: semax_body Vprog Gprog f_init_buf_state init_buf_state_spec.
 Proof.
 start_function.
+forward.
 Admitted.
 
 Lemma body_calc_chunk: semax_body Vprog Gprog f_calc_chunk calc_chunk_spec.
