@@ -24,6 +24,10 @@ This is a demonstration of cakeml integration into sel4, and calls from cakeml t
 
 This is the cakeml_ffi project, now built into CAmkES. Other example projects have been done directly on top of seL4 because the build system is simpler. Ultimately, however, we wish to support CAmkES as a means of organizing large, multi-component, seL4 projects.
 
+## camkes_apdt
+
+This project demonstrates the apdt cakeml example running within camkes. It uses the official libcamkescakeml library, which is just a camkes specific implementation of the basis ffi cakeml functions. 
+
 ### Build Instructions
 
 The following instructions apply to every project.
