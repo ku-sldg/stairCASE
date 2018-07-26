@@ -15,10 +15,8 @@
 
 #include <utils/zf_log.h>
 #include <sel4utils/sel4_zf_logif.h>
+#include <assert.h>
 
-
-//extern unsigned int argc;
-//extern char **argv;
 
 void cml_entry(void);
 
@@ -32,6 +30,6 @@ int main(void) {
     cml_entry();
     // CakeML doesn't ever return from its main entry point.
     // Instead, it calls cml_exit in basis_ffi.c
-    printf("Back in c land. This code is not reachable.\n");
+    assert(!"Should not return here from cml_entry");
     return 0;
 }
