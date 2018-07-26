@@ -13,14 +13,9 @@
 > gather struct examples from vst/progs  
 > fix inputs to coq function a little bit  
 > think about how to represent these functions in vst,  
-> cry a lot  
 > cheat by saying ints are ints  
 > verify the right rotate function, I guess  
 > think about about representing pointers in coq...  
-> cry a lot  
 > representing pointers is as simple as tptr  
 > try deal with separation clauses for void pointers  
-> cry a lot  
 
-
-## more later
