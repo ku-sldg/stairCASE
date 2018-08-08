@@ -1,0 +1,2 @@
+This is an open file!
+It is also a closed one!
