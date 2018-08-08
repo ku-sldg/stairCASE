@@ -2,7 +2,7 @@
 
 Require Import PeanoNat.
 
-Module Type APDT.
+Module Type APDTMod.
 
 Parameter P : Type.
   
@@ -254,4 +254,4 @@ Proof.
     eauto.
 Qed.
 
-End APDT.
+End APDTMod.
