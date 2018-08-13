@@ -2,6 +2,36 @@
 
 \usepackage{natbib}
 \usepackage{graphicx}
+\usepackage{mathpartir}
+
+\newcommand{\inbnd}{\mathord -}
+\newcommand{\outbnd}{\mathord +}
+\newcommand{\cnf}[1]{\ensuremath{\operatorname{\maths{#1}}}}
+\newcommand{\cnc}[1]{\ensuremath{\mathsf{#1}}}
+\newcommand{\mcl}[1]{\ensuremath{\mathcal{#1}}}
+\newcommand{\nxt}[4]{\xymatrix@C=3.5em{{#1}\ar@{=>}[r]^{#2\##3}&{#4}}}
+\newcommand{\seq}{\mathbin{;}}
+\newcommand{\encrypt}[2]{\ensuremath{\{#1\}_{#2}}}
+\newcommand{\sep}{\colon}
+\newcommand{\seqa}{\mathbin{;\!;}}
+\newcommand{\join}[3]{#1\hookrightarrow#3\hookleftarrow#2}
+\newcommand{\sig}[2]{\ensuremath{[\![#1]\!]_{#2}}}
+\newcommand{\act}[1]{\stackrel{#1}{\Rightarrow}}
+\newcommand{\all}[1]{\mathop{\forall#1\mathpunct.}}
+\newcommand{\some}[1]{\mathop{\exists#1\mathpunct.}}
+\newcommand{\skp}{\cnc{SKIP}}
+\newcommand{\env}{\cnc{SIG}}
+\newcommand{\usm}[2]{\cnc{USM}\;#1\;#2}
+\newcommand{\UV}[2]{\cnc{usm}_{#1}\;#2}
+\newcommand{\UU}[2]{\cnc{U}_{#1}\;#2}
+\newcommand{\lkim}[3]{\cnc{KIM}_{#1}\;#2\;#3}
+\newcommand{\LV}[3]{\cnc{kim}^{#1}_{#2}\;#3}
+\newcommand{\LL}[3]{\cnc{K}^{#1}_{#2}\;#3}
+\newcommand{\NV}[1]{\cnc{n}_{#1}}
+\newcommand{\NN}[1]{\cnc{N}_{#1}}
+\newcommand{\at}[2]{\mathop{@_{#1}}{#2}}
+\newcommand{\eval}[3]{\mcl{E}(#1,#2,#3)}
+\newcommand{\step}[1]{\stackrel{#1}{\longrightarrow}}
 
 \newcommand{\squash}{\parskip=0pt\itemsep=0pt}
 
@@ -130,6 +160,16 @@
     Platform AM and seL4IM 
   \end{itemize}
 \end{itemize}
+
+
+\section{APDT terms}
+
+\begin{mathpar}
+  \mathsf{seL4Meas} = \at{\mathsf{seL4AM}}{(\NV{1}\seq\usm{\mathsf{seL4Hash}}{\epsilon}\seq\lkim{\mathsf{platformAM}}{\mathsf{pkim}}{\epsilon}\seq\env)}
+
+  \mathsf{platformMeas} = \at{\mathsf{platformAM}}{(\NV{2}\seq\usm{\mathsf{seL4Meas}}{\NV{1}}\seq\lkim{\mathsf{userAM}}{\mathsf{ukim}}{\epsilon}\seq\env)}
+
+\end{mathpar}
 
 \section{Open Questions}
         

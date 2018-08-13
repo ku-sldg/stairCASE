@@ -284,6 +284,17 @@ Proof.
   auto.
 Qed.
 
-Definition ex :=
-  AT seL4AM (LN (BR PAR (KIM platformAM)
-                   (AT platformAM (LN USM SIG))) SIG).
+(* Needs a nonce in front of the two measurements *)
+Definition seL4Hash :=
+  AT seL4AM (LN (LN USM (KIM platformAM)) SIG).
+
+(* Needs a nonce in front of the userAM measurement.  Needs a fresh nonce
+   for seL4Hash *)
+Definition platformMeas :=
+  AT platformAM (LN (LN (LN seL4Hash (KIM userAM)) USM) SIG).
+
+(* Needs a nonce in front of the userAM measurement. *)
+Definition userMeas :=
+  AT userAM (LN (LN platformMeas USM) SIG).
+
+Eval cbv in userMeas.
