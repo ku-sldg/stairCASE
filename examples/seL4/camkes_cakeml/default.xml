@@ -15,7 +15,7 @@
         <linkfile src="kbuild-tool" dest="tools/kbuild"/>
     </project>
 
-    <project name="camkes-tool.git" path="tools/camkes">
+    <project name="camkes-tool.git" path="tools/camkes" revision="2ed061aa5fa31d2fe6b9cf8a0318e1829e07f77f" upstream="master">
         <linkfile src="camkes-top-level.cmake" dest="CMakeLists.txt"/>
     </project>
 

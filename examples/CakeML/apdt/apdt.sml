@@ -3,8 +3,8 @@ datatype nat = O
 
 fun natToString n =
     case n of O => Int.toString 0
-            | S n' => Int.toString (1 + (case Int.fromString (natToString n') of NONE => 0
-                                                                               | SOME i => i))
+            | S n' => Int.toString (1 + (case Int.fromString (natToString n') of None => 0
+                                                                               | Some i => i))
 
 datatype order = SEQ | PAR
 
