@@ -240,7 +240,86 @@ Proof.
     eauto.
 Qed.
 
-(** [Measures] is true when [P] measures [P] in [APDT] *)
+Definition MSMT := {a:APDT | a=USM \/ exists x, a=(KIM x)}.
+
+Definition MSRS := {a:APDT | exists x y, a=(AT x y)}.
+
+(** [Before a m1 m2] is true when [m1] occurs strictly before [m2] in [a] *)
+
+Inductive Occurs : APDT -> APDT -> Prop :=
+| same: forall m:APDT, Occurs m m
+| seql: forall m a l r:APDT, a=(LN l r) -> Occurs m l -> Occurs m a
+| seqr: forall m a l r:APDT, a=(LN l r) -> Occurs m r -> Occurs m a
+| parl: forall o, forall m a l r:APDT, a=(BR o l r) -> Occurs m l -> Occurs m a
+| parr: forall o, forall m a l r:APDT, a=(BR o l r) -> Occurs m r -> Occurs m a
+| inat: forall m a t:APDT, forall p:P, a=(AT p t) -> Occurs m t -> Occurs m a.
+
+Hint Constructors Occurs.
+
+Example exo1: Occurs (KIM platformAM) (LN (KIM platformAM) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo2: Occurs (USM) (LN (KIM platformAM) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo3: Occurs (USM) (LN (KIM platformAM) (LN (KIM platformAM) (USM))).
+Proof.
+  eauto.
+Qed.
+
+Example exo4: Occurs (USM) (LN (LN (KIM platformAM) (KIM platformAM)) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo5: Occurs (USM) (LN (LN (KIM platformAM) (USM)) (KIM platformAM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo6: Occurs (KIM platformAM) (BR SEQ (KIM platformAM) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo7: Occurs (USM) (BR SEQ (KIM platformAM) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo8: Occurs (USM) (BR SEQ (KIM platformAM) (BR SEQ (KIM platformAM) (USM))).
+Proof.
+  eauto.
+Qed.
+
+Example exo9: Occurs (USM) (BR SEQ (BR SEQ (KIM platformAM) (KIM platformAM)) (USM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo10: Occurs (USM) (BR SEQ (BR SEQ (KIM platformAM) (USM)) (KIM platformAM)).
+Proof.
+  eauto.
+Qed.
+
+Example exo11: Occurs (USM) (BR SEQ (AT platformAM (BR SEQ (KIM platformAM) (USM))) (KIM platformAM)).
+Proof.
+  eauto.
+Qed.
+
+
+Example exb2: Before (BR SEQ (KIM platformAM) (BR SEQ (USM) (AT platformAM USM))) (KIM platformAM) (AT platformAM USM).
+Proof.
+  eapply trans. auto
+
+
+  
+
+(** [Measures a p1 p2] is true when [p1] measures [p2] in [a] *)
 
 Inductive Measures : APDT -> P -> P -> Prop :=
 | dirKIM: forall a, forall p1 p2, a=(AT p1 (KIM p2)) -> Measures a p1 p2
