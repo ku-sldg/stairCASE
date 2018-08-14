@@ -165,10 +165,12 @@
 \section{APDT terms}
 
 \begin{mathpar}
-  \mathsf{seL4Meas} = \at{\mathsf{seL4AM}}{(\NV{1}\seq\usm{\mathsf{seL4Hash}}{\epsilon}\seq\lkim{\mathsf{platformAM}}{\mathsf{pkim}}{\epsilon}\seq\env)}
+  \mathsf{seL4Meas}\;\NV{} = \at{\mathsf{seL4AM}}{(\NV{n}\seq\usm{\mathsf{seL4Hash}}{\epsilon}\seq\lkim{\mathsf{platformAM}}{\mathsf{pkim}}{\epsilon}\seq\env)}
 
-  \mathsf{platformMeas} = \at{\mathsf{platformAM}}{(\NV{2}\seq\usm{\mathsf{seL4Meas}}{\NV{1}}\seq\lkim{\mathsf{userAM}}{\mathsf{ukim}}{\epsilon}\seq\env)}
+  \mathsf{platMeas}\;\NV{} =
+  \at{\mathsf{platformAM}}{(\NV{}\seq\mathsf{seL4Meas}\;\NV{1}\seq\usm{\mathsf{platformHash}}{\epsilon}\seq\lkim{\mathsf{userAM}}{\mathsf{ukim}}{\epsilon}\seq\env)}
 
+  \mathsf{userMeas}\;\NV{} = \at{\mathsf{userAM}}{(\NV{}\seq\mathsf{platformMeas}\;\NV{2}\seq\usm{\mathsf{userHash}}{\epsilon}\seq\env)}
 \end{mathpar}
 
 \section{Open Questions}
