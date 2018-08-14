@@ -239,14 +239,16 @@ Proof.
         inv H.
     eauto.
 Qed.
-  
+
+(** [Measures] is true when [P] measures [P] in [APDT] *)
+
 Inductive Measures : APDT -> P -> P -> Prop :=
 | dirKIM: forall a, forall p1 p2, a=(AT p1 (KIM p2)) -> Measures a p1 p2
-| seqKIMl: forall a b c, forall p1 p2, a=(AT p1 (LN b c)) -> Measures b p1 p2 -> Measures a p1 p2
-| seqKIMr: forall a b c, forall p1 p2, a=(AT p1 (LN b c)) -> Measures c p1 p2 -> Measures a p1 p2
-| parKIMl: forall a b c, forall d, forall p1 p2, a=(AT p1 (BR d b c)) -> Measures b p1 p2 -> Measures a p1 p2
-| parKIMr: forall a b c, forall d, forall p1 p2, a=(AT p1 (BR d b c)) -> Measures c p1 p2 -> Measures a p1 p2.
-
+| seqKIMl: forall a b c, forall p1 p2, a=(AT p1 (LN b c)) -> Measures (AT p1 b) p1 p2 -> Measures a p1 p2
+| seqKIMr: forall a b c, forall p1 p2, a=(AT p1 (LN b c)) -> Measures (AT p1 c) p1 p2 -> Measures a p1 p2
+| parKIMl: forall a b c, forall d, forall p1 p2, a=(AT p1 (BR d b c)) -> Measures (AT p1 b) p1 p2 -> Measures a p1 p2
+| parKIMr: forall a b c, forall d, forall p1 p2, a=(AT p1 (BR d b c)) -> Measures (AT p1 c) p1 p2 -> Measures a p1 p2
+| sigKIM: forall a b, forall p1 p2, a=(LN b SIG) -> Measures b p1 p2 -> Measures a p1 p2.
 Hint Constructors Measures.
 
 Definition ex1 := (AT seL4AM (KIM platformAM)).
@@ -258,30 +260,34 @@ Qed.
 
 Definition ex2 := (AT seL4AM (LN (USM) (KIM platformAM))).
 
-Lemma ed2l: Measures ex1 seL4AM platformAM.
+Lemma ed2l: Measures ex2 seL4AM platformAM.
 Proof.
-  auto.
+  unfold ex2.
+  eauto.
 Qed.
   
 Definition ex3 := (AT seL4AM (LN (KIM platformAM) (USM))).
 
-Lemma ed3l: Measures ex1 seL4AM platformAM.
+Lemma ed3l: Measures ex3 seL4AM platformAM.
 Proof.
-  auto.
+  unfold ex3.
+  eauto.
 Qed.
 
 Definition ex4 := (AT seL4AM (BR PAR (KIM platformAM) (USM))).
 
-Lemma ed4l: Measures ex1 seL4AM platformAM.
+Lemma ed4l: Measures ex4 seL4AM platformAM.
 Proof.
-  auto.
+  unfold ex4.
+  eauto.
 Qed.
 
 Definition ex5 := (AT seL4AM (BR SEQ (KIM platformAM) (USM))).
 
-Lemma ed5l: Measures ex1 seL4AM platformAM.
+Lemma ed5l: Measures ex5 seL4AM platformAM.
 Proof.
-  auto.
+  unfold ex5.
+  eauto.
 Qed.
 
 (* Needs a nonce in front of the two measurements *)
@@ -297,4 +303,25 @@ Definition platformMeas :=
 Definition userMeas :=
   AT userAM (LN (LN platformMeas USM) SIG).
 
-Eval cbv in userMeas.
+Lemma m1: Measures platformMeas platformAM userAM.
+Proof.
+  unfold platformMeas.
+  unfold seL4Hash.
+  eauto.
+Qed.
+
+Lemma m2: Measures seL4Hash seL4AM platformAM.
+Proof.
+  unfold seL4Hash.
+  eauto.
+Qed.
+
+Lemma m3: Measures platformMeas seL4AM platformAM.
+Proof.
+  unfold platformMeas.
+  unfold seL4Hash.
+  eauto.
+Abort.
+
+  
+  
