@@ -37,6 +37,7 @@ virtqueue_device_t key_recv_virtqueue;
 virtqueue_driver_t key_send_virtqueue;
 
 void handle_key_recv_callback(virtqueue_device_t *vq);
+void handle_key_send_callback(virtqueue_driver_t *vq);
 
 unsigned short one_comp_checksum(char *data, size_t length)
 {
@@ -229,7 +230,7 @@ void handle_key_recv_callback(virtqueue_device_t *vq)
             printf("%x ", my_buf[i]);
         }
         printf("\n");
-        handle_recv_data((char *) buf, buf_size);
+        //handle_recv_data((char *) buf, buf_size);
     }
 
     if (!virtqueue_add_used_buf(&recv_virtqueue, &handle, 0)) {
@@ -257,6 +258,22 @@ void handle_send_callback(virtqueue_driver_t *vq)
     }
 }
 
+void handle_key_send_callback(virtqueue_driver_t *vq)
+{
+    void *buf = NULL;
+    size_t buf_size = 0, wr_len = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_used_buf(vq, &handle, &wr_len)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
+    }
+
+    while (camkes_virtqueue_driver_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        /* Clean up and free the buffer we allocated */
+        camkes_virtqueue_buffer_free(vq, buf);
+    }
+}
 
 void ping_wait_callback(void)
 {
@@ -267,6 +284,7 @@ void ping_wait_callback(void)
     if (VQ_DRV_POLL(&send_virtqueue)) {
         handle_send_callback(&send_virtqueue);
     }
+
     if (VQ_DEV_POLL(&key_recv_virtqueue)) {
         handle_key_recv_callback(&key_recv_virtqueue);
     }
@@ -296,14 +314,14 @@ int run(void)
 
     // For keys!
     /* Initialise recv virtqueue */
-    err = camkes_virtqueue_device_init(&key_recv_virtqueue, 0);
+    err = camkes_virtqueue_device_init(&key_recv_virtqueue, 2);
     if (err) {
         ZF_LOGE("Unable to initialise key_recv virtqueue");
         return 1;
     }
 
     /* Initialise send virtqueue */
-    err = camkes_virtqueue_driver_init(&key_send_virtqueue, 1);
+    err = camkes_virtqueue_driver_init(&key_send_virtqueue, 3);
     if (err) {
         ZF_LOGE("Unable to initialise key_send virtqueue");
         return 1;

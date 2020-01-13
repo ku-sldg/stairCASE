@@ -23,6 +23,7 @@
 assembly {
 	composition {}
 	configuration {
+
         vm.linux_address_config = {
             "linux_ram_base" : VAR_STRINGIZE(VM_RAM_BASE),
             "linux_ram_paddr_base" : VAR_STRINGIZE(VM_RAM_BASE),
@@ -68,9 +69,10 @@ assembly {
                       {"path": "/soc/phy@12130000"},
                       {"path": "/soc/amba/pdma@121a0000"},
                       {"path": "/soc/amba/pdma@121b0000"},
-                      {"path": "/soc/mmc@12200000"},
-                      {"path": "/soc/mmc@12210000"},
-                      {"path": "/soc/mmc@12220000"},
+                      // disable access to sd card
+                      //{"path": "/soc/mmc@12200000"},
+                      //{"path": "/soc/mmc@12210000"},
+                      //{"path": "/soc/mmc@12220000"},
                       {"path": "/soc/usb3-1/dwc3@12400000"},
                       {"path": "/soc/phy@12500000"},
                       {"path": "/soc/sysmmu@12880000"},
@@ -109,5 +111,5 @@ assembly {
 
         vm.irqs =  [27]; // VTCNT (arch timer)
 
-	}
+    }
 }

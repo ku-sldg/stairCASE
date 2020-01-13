@@ -27,8 +27,8 @@
 #define ICMP_MSG_SIZE 64 - sizeof(struct icmphdr)
 #define IPV4_LENGTH 4
 
-virtqueue_device_t recv_virtqueue;
-virtqueue_driver_t send_virtqueue;
+virtqueue_device_t keyman_recv_virtqueue;
+virtqueue_driver_t keyman_send_virtqueue;
 
 void handle_recv_callback(virtqueue_device_t *vq);
 void handle_send_callback(virtqueue_driver_t *vq);
@@ -56,16 +56,16 @@ unsigned short one_comp_checksum(char *data, size_t length)
 int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size)
 {
     void *buf = NULL;
-    int err = camkes_virtqueue_buffer_alloc(&send_virtqueue, &buf, outgoing_data_size);
+    int err = camkes_virtqueue_buffer_alloc(&keyman_send_virtqueue, &buf, outgoing_data_size);
     if (err) {
         return -1;
     }
     memcpy(buf, outgoing_data, outgoing_data_size);
-    if (camkes_virtqueue_driver_send_buffer(&send_virtqueue, buf, outgoing_data_size) != 0) {
-        camkes_virtqueue_buffer_free(&send_virtqueue, buf);
+    if (camkes_virtqueue_driver_send_buffer(&keyman_send_virtqueue, buf, outgoing_data_size) != 0) {
+        camkes_virtqueue_buffer_free(&keyman_send_virtqueue, buf);
         return -1;
     }
-    send_virtqueue.notify();
+    keyman_send_virtqueue.notify();
     return 0;
 }
 
@@ -195,12 +195,12 @@ void handle_recv_callback(virtqueue_device_t *vq)
         handle_recv_data((char *) buf, buf_size);
     }
 
-    if (!virtqueue_add_used_buf(&recv_virtqueue, &handle, 0)) {
+    if (!virtqueue_add_used_buf(&keyman_recv_virtqueue, &handle, 0)) {
         ZF_LOGE("Unable to enqueue used recv buffer");
         return;
     }
 
-    recv_virtqueue.notify();
+    keyman_recv_virtqueue.notify();
 }
 
 void handle_send_callback(virtqueue_driver_t *vq)
@@ -223,37 +223,39 @@ void handle_send_callback(virtqueue_driver_t *vq)
 
 void ping_wait_callback(void)
 {
-    if (VQ_DEV_POLL(&recv_virtqueue)) {
-        handle_recv_callback(&recv_virtqueue);
+    if (VQ_DEV_POLL(&keyman_recv_virtqueue)) {
+        handle_recv_callback(&keyman_recv_virtqueue);
     }
 
-    if (VQ_DRV_POLL(&send_virtqueue)) {
-        handle_send_callback(&send_virtqueue);
+    if (VQ_DRV_POLL(&keyman_send_virtqueue)) {
+        handle_send_callback(&keyman_send_virtqueue);
     }
 }
 
 int run(void)
 {
-    ZF_LOGE("Starting ping echo component");
+    ZF_LOGE("Starting key manager component");
 
     /* Initialise recv virtqueue */
-    int err = camkes_virtqueue_device_init(&recv_virtqueue, 0);
+    int err = camkes_virtqueue_device_init(&keyman_recv_virtqueue, 4);
     if (err) {
-        ZF_LOGE("Unable to initialise recv virtqueue");
+        ZF_LOGE("Unable to initialise key_recv virtqueue");
         return 1;
     }
 
     /* Initialise send virtqueue */
-    err = camkes_virtqueue_driver_init(&send_virtqueue, 1);
+    err = camkes_virtqueue_driver_init(&keyman_send_virtqueue, 5);
     if (err) {
-        ZF_LOGE("Unable to initialise send virtqueue");
+        ZF_LOGE("Unable to initialise key_send virtqueue");
         return 1;
     }
 
     // send a packet to ping_client "greetings"
+    /*
     char* test = "Greetings!";
     size_t test_len = strlen(test);
     send_outgoing_packet( test, test_len );
+    */
 
     return 0;
 }
