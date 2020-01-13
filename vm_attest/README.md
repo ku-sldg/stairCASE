@@ -1,3 +1,14 @@
+
+This projects builds off of the example application "Virtio Net Demo" described below.
+
+The intention is to describe and demonstrate communication of arbitrary messages between components,
+as well as into and out of the linux vm.
+
+Contrary to what is described below, please use this to build the application for the Odroid XU4:
+```
+ ../init-build.sh -DCAMKES_VM_APP=vm_attest -DAARCH32=1 -DPLATFORM=exynos5422
+```
+
 <!--
   Copyright 2019, Data61
   Commonwealth Scientific and Industrial Research Organisation (CSIRO)
