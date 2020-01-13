@@ -9,6 +9,12 @@ Contrary to what is described below, please use this to build the application fo
  ../init-build.sh -DCAMKES_VM_APP=vm_attest -DAARCH32=1 -DPLATFORM=exynos5422
 ```
 
+To do:
+* communication out of the linux vm
+* demonstrate comms from vm -> comp1 -> comp2
+* demonstrate comms from comp1 -> comp2 -> vm
+
+
 <!--
   Copyright 2019, Data61
   Commonwealth Scientific and Industrial Research Organisation (CSIRO)
