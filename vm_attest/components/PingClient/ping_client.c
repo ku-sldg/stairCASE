@@ -227,7 +227,7 @@ void handle_key_recv_callback(virtqueue_device_t *vq)
             if (i % 15 == 0) {
                 printf("\n%d:\t", i);
             }
-            printf("%x ", my_buf[i]);
+            printf("%c ", my_buf[i]);
         }
         printf("\n");
         //handle_recv_data((char *) buf, buf_size);

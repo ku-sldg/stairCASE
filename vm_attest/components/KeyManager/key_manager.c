@@ -251,11 +251,9 @@ int run(void)
     }
 
     // send a packet to ping_client "greetings"
-    /*
     char* test = "Greetings!";
     size_t test_len = strlen(test);
     send_outgoing_packet( test, test_len );
-    */
 
     return 0;
 }
