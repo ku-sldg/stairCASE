@@ -10,9 +10,14 @@ Contrary to what is described below, please use this to build the application fo
 ```
 
 To do:
-* communication out of the linux vm
+* arbitrary communication out of the linux vm
+* arbitrary communication into the linux vm
 * demonstrate comms from vm -> comp1 -> comp2
 * demonstrate comms from comp1 -> comp2 -> vm
+
+Notes:
+It appears as though there can be at most 1 component which communicates with the linux vm.
+That is, a ping to any 192.168.1.xxx address will reach the ping component.
 
 
 <!--
