@@ -27,8 +27,8 @@
 #define ICMP_MSG_SIZE 64 - sizeof(struct icmphdr)
 #define IPV4_LENGTH 4
 
-virtqueue_device_t recv_virtqueue;
-virtqueue_driver_t send_virtqueue;
+virtqueue_device_t vm_recv_virtqueue;
+virtqueue_driver_t vm_send_virtqueue;
 void handle_recv_callback(virtqueue_device_t *vq);
 void handle_send_callback(virtqueue_driver_t *vq);
 
@@ -42,39 +42,19 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
-unsigned short one_comp_checksum(char *data, size_t length)
-{
-    unsigned int sum = 0;
-    int i = 0;
-
-    for (i = 0; i < length - 1; i += 2) {
-        unsigned short *data_word = (unsigned short *)&data[i];
-        sum += *data_word;
-    }
-    /* Odd size */
-    if (length % 2) {
-        unsigned short data_word = (unsigned char)data[i];
-        sum += data_word;
-    }
-
-    sum = (sum >> 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-    return ~sum;
-}
-
-int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size)
+int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
-    int err = camkes_virtqueue_buffer_alloc(&send_virtqueue, &buf, outgoing_data_size);
+    int err = camkes_virtqueue_buffer_alloc(&destination, &buf, outgoing_data_size);
     if (err) {
         return -1;
     }
     memcpy(buf, outgoing_data, outgoing_data_size);
-    if (camkes_virtqueue_driver_send_buffer(&send_virtqueue, buf, outgoing_data_size) != 0) {
-        camkes_virtqueue_buffer_free(&send_virtqueue, buf);
+    if (camkes_virtqueue_driver_send_buffer(&destination, buf, outgoing_data_size) != 0) {
+        camkes_virtqueue_buffer_free(&destination, buf);
         return -1;
     }
-    send_virtqueue.notify();
+    destination.notify();
     return 0;
 }
 
@@ -103,92 +83,11 @@ void print_ip_packet(void *ip_buf, size_t ip_length)
     printf("\n");
 }
 
-int create_arp_req_reply(char *recv_data, size_t recv_data_size)
-{
-    unsigned char reply_buffer[ETHERMTU];
-
-    struct ethhdr *rcv_req = (struct ethhdr *) recv_data;
-    struct ether_arp *arp_req = (struct ether_arp *)(recv_data + sizeof(struct ethhdr));
-
-    struct ethhdr *send_reply = (struct ethhdr *) reply_buffer;
-    struct ether_arp *arp_reply = (struct ether_arp *)(reply_buffer + sizeof(struct ethhdr));
-
-    memcpy(send_reply->h_dest, arp_req->arp_sha, ETH_ALEN);
-    send_reply->h_proto = htons(ETH_P_ARP);
-
-    /* MAC Address */
-    memcpy(arp_reply->arp_tha, arp_req->arp_sha, ETH_ALEN);
-    memcpy(arp_reply->arp_sha, arp_req->arp_sha, ETH_ALEN);
-    arp_reply->arp_sha[5] = arp_reply->arp_sha[5] + 2;
-
-    memcpy(send_reply->h_source, arp_reply->arp_sha, ETH_ALEN);
-    /* IP Addresss */
-    for (int i = 0; i < IPV4_LENGTH; i++) {
-        arp_reply->arp_spa[i] = arp_req->arp_tpa[i];
-    }
-    for (int i = 0; i < IPV4_LENGTH; i++) {
-        arp_reply->arp_tpa[i] = arp_req->arp_spa[i];
-    }
-    /* ARP header fields */
-    arp_reply->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
-    arp_reply->ea_hdr.ar_pro = htons(ETH_P_IP);
-    arp_reply->ea_hdr.ar_op = htons(ARPOP_REPLY);
-    arp_reply->ea_hdr.ar_hln = ETH_ALEN;
-    arp_reply->ea_hdr.ar_pln = IPV4_LENGTH;
-
-    return send_outgoing_packet(reply_buffer, sizeof(struct ethhdr) + sizeof(struct ether_arp));
-}
-
-int create_icmp_req_reply(char *recv_data, size_t recv_data_size)
-{
-
-    struct ethhdr *eth_req = (struct ethhdr *) recv_data;
-    struct iphdr *ip_req = (struct iphdr *)(recv_data + sizeof(struct ethhdr));
-    struct icmphdr *icmp_req = (struct icmphdr *)(recv_data + sizeof(struct ethhdr) + sizeof(struct iphdr));
-
-    unsigned char reply_buffer[ETHERMTU];
-    struct ethhdr *eth_reply = (struct ethhdr *) reply_buffer;
-    struct iphdr *ip_reply = (struct iphdr *)(reply_buffer + sizeof(struct ethhdr));
-    struct icmphdr *icmp_reply = (struct icmphdr *)(reply_buffer + sizeof(struct ethhdr) + sizeof(struct iphdr));
-    char *icmp_msg = (char *)(icmp_reply + 1);
-
-    memcpy(eth_reply->h_dest, eth_req->h_source, ETH_ALEN);
-    memcpy(eth_reply->h_source, eth_req->h_dest, ETH_ALEN);
-    eth_reply->h_proto = htons(ETH_P_IP);
-
-    memcpy(ip_reply, ip_req, sizeof(struct iphdr));
-    in_addr_t saddr = ip_reply->saddr;
-    ip_reply->saddr = ip_reply->daddr;
-    ip_reply->daddr = saddr;
-
-    memset(icmp_msg, 0, ICMP_MSG_SIZE);
-    icmp_reply->un.echo.sequence =  icmp_req->un.echo.sequence;
-    icmp_reply->un.echo.id = icmp_req->un.echo.id;
-    icmp_reply->type = ICMP_ECHOREPLY;
-    icmp_reply->checksum = one_comp_checksum((char *)icmp_reply, sizeof(struct icmphdr) + ICMP_MSG_SIZE);
-
-    /* Need to set checksum to 0 before calculating checksum of the header */
-    ip_reply->check = 0;
-    ip_reply->check = one_comp_checksum((char *)ip_reply, sizeof(struct iphdr));
-
-    return send_outgoing_packet(reply_buffer,
-                                sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_MSG_SIZE);
-}
-
-void handle_recv_data(char *recv_data, size_t recv_data_size)
-{
-    struct ethhdr *rcv_req = (struct ethhdr *) recv_data;
-    if (ntohs(rcv_req->h_proto) == ETH_P_ARP) {
-        create_arp_req_reply(recv_data, recv_data_size);
-    } else if (ntohs(rcv_req->h_proto) == ETH_P_IP) {
-        char ip_packet[ETHERMTU];
-        memcpy(ip_packet, recv_data + sizeof(struct ethhdr), recv_data_size - sizeof(struct ethhdr));
-        print_ip_packet(ip_packet, recv_data_size - sizeof(struct ethhdr));
-        create_icmp_req_reply(recv_data, recv_data_size);;
-    }
-
-}
-
+/*
+** Received from vm
+** Send to whomever is indicated
+** NOTE: for now, always send to AM
+*/
 void handle_recv_callback(virtqueue_device_t *vq)
 {
     void *buf = NULL;
@@ -201,49 +100,22 @@ void handle_recv_callback(virtqueue_device_t *vq)
     }
 
     while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
-        handle_recv_data((char *) buf, buf_size);
+        // always forward to am for now
+        ZF_LOGE("Got a packet, sending to AM...");
+        send_outgoing_packet( (char*) buf, buf_size, am_send_virtqueue );
     }
 
-    if (!virtqueue_add_used_buf(&recv_virtqueue, &handle, 0)) {
+    if (!virtqueue_add_used_buf(&vm_recv_virtqueue, &handle, 0)) {
         ZF_LOGE("Unable to enqueue used recv buffer");
         return;
     }
 
-    recv_virtqueue.notify();
+    vm_recv_virtqueue.notify();
 }
 
-void handle_key_recv_callback(virtqueue_device_t *vq)
-{
-    void *buf = NULL;
-    size_t buf_size = 0;
-    vq_flags_t flag;
-    virtqueue_ring_object_t handle;
-    if (!virtqueue_get_available_buf(vq, &handle)) {
-        ZF_LOGE("Client virtqueue dequeue failed");
-        return;
-    }
-
-    while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
-        char* my_buf = (char*)buf;
-        printf("Packet Contents:");
-        for (int i = 0; i < buf_size; i++) {
-            if (i % 15 == 0) {
-                printf("\n%d:\t", i);
-            }
-            printf("%c ", my_buf[i]);
-        }
-        printf("\n");
-        //handle_recv_data((char *) buf, buf_size);
-    }
-
-    if (!virtqueue_add_used_buf(&recv_virtqueue, &handle, 0)) {
-        ZF_LOGE("Unable to enqueue used recv buffer");
-        return;
-    }
-
-    recv_virtqueue.notify();
-}
-
+/*
+** Send to vm
+*/
 void handle_send_callback(virtqueue_driver_t *vq)
 {
     void *buf = NULL;
@@ -261,6 +133,36 @@ void handle_send_callback(virtqueue_driver_t *vq)
     }
 }
 
+/*
+** Received from key_manager
+** Send to vm
+*/
+void handle_key_recv_callback(virtqueue_device_t *vq)
+{
+    void *buf = NULL;
+    size_t buf_size = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_available_buf(vq, &handle)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
+    }
+
+    while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        send_outgoing_packet( (char*) buf, buf_size, vm_send_virtqueue );
+    }
+
+    if (!virtqueue_add_used_buf(&key_recv_virtqueue, &handle, 0)) {
+        ZF_LOGE("Unable to enqueue used key_recv buffer");
+        return;
+    }
+
+    key_recv_virtqueue.notify();
+}
+
+/*
+** Send to vm
+*/
 void handle_key_send_callback(virtqueue_driver_t *vq)
 {
     void *buf = NULL;
@@ -278,14 +180,63 @@ void handle_key_send_callback(virtqueue_driver_t *vq)
     }
 }
 
-void ping_wait_callback(void)
+/*
+** Received from attestation_manager
+** Send to vm
+*/
+void handle_am_recv_callback(virtqueue_device_t *vq)
 {
-    if (VQ_DEV_POLL(&recv_virtqueue)) {
-        handle_recv_callback(&recv_virtqueue);
+    void *buf = NULL;
+    size_t buf_size = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_available_buf(vq, &handle)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
     }
 
-    if (VQ_DRV_POLL(&send_virtqueue)) {
-        handle_send_callback(&send_virtqueue);
+    while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        // forward to the vm
+        send_outgoing_packet( (char*) buf, buf_size, vm_send_virtqueue );
+    }
+
+    if (!virtqueue_add_used_buf(&am_recv_virtqueue, &handle, 0)) {
+        ZF_LOGE("Unable to enqueue used am_recv buffer");
+        return;
+    }
+
+    am_recv_virtqueue.notify();
+}
+
+/*
+** Send to vm
+*/
+void handle_am_send_callback(virtqueue_driver_t *vq)
+{
+    void *buf = NULL;
+    size_t buf_size = 0, wr_len = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_used_buf(vq, &handle, &wr_len)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
+    }
+
+    while (camkes_virtqueue_driver_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        /* Clean up and free the buffer we allocated */
+        camkes_virtqueue_buffer_free(vq, buf);
+    }
+}
+
+
+void ping_wait_callback(void)
+{
+    if (VQ_DEV_POLL(&vm_recv_virtqueue)) {
+        handle_recv_callback(&vm_recv_virtqueue);
+    }
+
+    if (VQ_DRV_POLL(&vm_send_virtqueue)) {
+        handle_send_callback(&vm_send_virtqueue);
     }
 
     if (VQ_DEV_POLL(&key_recv_virtqueue)) {
@@ -295,23 +246,32 @@ void ping_wait_callback(void)
     if (VQ_DRV_POLL(&key_send_virtqueue)) {
         handle_send_callback(&key_send_virtqueue);
     }
+
+    if (VQ_DEV_POLL(&am_recv_virtqueue)) {
+        handle_am_recv_callback(&am_recv_virtqueue);
+    }
+
+    if (VQ_DRV_POLL(&am_send_virtqueue)) {
+        handle_send_callback(&am_send_virtqueue);
+    }
 }
 
 int run(void)
 {
     ZF_LOGE("Starting flagger component");
 
+    // for vm!
     /* Initialise recv virtqueue */
-    int err = camkes_virtqueue_device_init(&recv_virtqueue, 0);
+    int err = camkes_virtqueue_device_init(&vm_recv_virtqueue, 0);
     if (err) {
-        ZF_LOGE("Unable to initialise recv virtqueue");
+        ZF_LOGE("Unable to initialise vm_recv virtqueue");
         return 1;
     }
 
     /* Initialise send virtqueue */
-    err = camkes_virtqueue_driver_init(&send_virtqueue, 1);
+    err = camkes_virtqueue_driver_init(&vm_send_virtqueue, 1);
     if (err) {
-        ZF_LOGE("Unable to initialise send virtqueue");
+        ZF_LOGE("Unable to initialise vm_send virtqueue");
         return 1;
     }
 

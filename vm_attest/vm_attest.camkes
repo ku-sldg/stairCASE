@@ -21,8 +21,8 @@ import <VirtQueue/VirtQueue.camkes>;
 component Flagger {
     control;
     /* Virtqueue connection for send and recv */
-    uses VirtQueueDev recv;
-    uses VirtQueueDrv send;
+    uses VirtQueueDev vm_recv;
+    uses VirtQueueDrv vm_send;
 
     uses VirtQueueDev key_recv;
     uses VirtQueueDrv key_send;
@@ -37,15 +37,27 @@ component Flagger {
 component ComponentAM {
     control;
     // Virtqueue connection for send and recv
-    uses VirtQueueDev recv;
-    uses VirtQueueDrv send;
+    uses VirtQueueDev flagger_recv;
+    uses VirtQueueDrv flagger_send;
+
+    uses VirtQueueDev key_recv;
+    uses VirtQueueDrv key_send;
+
+    emits Callback self;
+    consumes Callback msg_wait;
 }
 
 component KeyManager {
     control;
     // Virtqueue connection for send and recv
-    uses VirtQueueDev recv;
-    uses VirtQueueDrv send;
+    uses VirtQueueDev flagger_recv;
+    uses VirtQueueDrv flagger_send;
+
+    uses VirtQueueDev am_recv;
+    uses VirtQueueDrv am_send;
+
+    emits Callback self;
+    consumes Callback msg_wait;
 }
 
 assembly {
@@ -53,25 +65,33 @@ assembly {
         component Flagger flagger;
         component ComponentAM attestation_manager;
         component KeyManager key_manager;
-        component VirtQueueInit ping_vqinit0;
-        component VirtQueueInit ping_vqinit1;
-        component VirtQueueInit key_vqinit0;
-        component VirtQueueInit key_vqinit1;
-        component VirtQueueInit am_vqinit0;
-        component VirtQueueInit am_vqinit1;
 
-        connection seL4GlobalAsynchCallback ping_global_callback(from flagger.self, to flagger.ping_wait);
+        component VirtQueueInit flagger_to_vm0;
+        component VirtQueueInit flagger_to_vm1;
+        component VirtQueueInit flagger_to_key0;
+        component VirtQueueInit flagger_to_key1;
+        component VirtQueueInit flagger_to_am0;
+        component VirtQueueInit flagger_to_am1;
+        component VirtQueueInit am_to_key0;
+        component VirtQueueInit am_to_key1;
+
+        connection seL4GlobalAsynchCallback flagger_global_callback(from flagger.self, to flagger.ping_wait);
+        connection seL4GlobalAsynchCallback am_global_callback(from attestation_manager.self, to attestation_manager.msg_wait);
+        connection seL4GlobalAsynchCallback key_global_callback(from key_manager.self, to key_manager.msg_wait);
+
         connection seL4VMDTBPassthrough vm_dtb(from vm.dtb_self, to vm.dtb);
 
-        connection seL4VirtQueues ping_virtq_conn0(to ping_vqinit0.init, from flagger.send, from vm.recv);
-        connection seL4VirtQueues ping_virtq_conn1(to ping_vqinit1.init, from flagger.recv, from vm.send);
+        connection seL4VirtQueues ping_virtq_conn0(to flagger_to_vm0.init, from flagger.vm_send, from vm.recv);
+        connection seL4VirtQueues ping_virtq_conn1(to flagger_to_vm1.init, from flagger.vm_recv, from vm.send);
 
-        connection seL4VirtQueues key_virtq_conn0(to key_vqinit0.init, from key_manager.send, from flagger.key_recv);
-        connection seL4VirtQueues key_virtq_conn1(to key_vqinit1.init, from key_manager.recv, from flagger.key_send);
+        connection seL4VirtQueues flagger_key_virtq_conn0(to flagger_to_key0.init, from key_manager.flagger_send, from flagger.key_recv);
+        connection seL4VirtQueues flagger_key_virtq_conn1(to flagger_to_key1.init, from key_manager.flagger_recv, from flagger.key_send);
 
-        connection seL4VirtQueues am_virtq_conn0(to am_vqinit0.init, from attestation_manager.send, from flagger.am_recv);
-        connection seL4VirtQueues am_virtq_conn1(to am_vqinit1.init, from attestation_manager.recv, from flagger.am_send);
+        connection seL4VirtQueues flagger_am_virtq_conn0(to flagger_to_am0.init, from attestation_manager.flagger_send, from flagger.am_recv);
+        connection seL4VirtQueues flagger_am_virtq_conn1(to flagger_to_am1.init, from attestation_manager.flagger_recv, from flagger.am_send);
 
+        connection seL4VirtQueues am_key_virtq_conn0(to am_to_key0.init, from attestation_manager.key_send, from key_manager.am_recv);
+        connection seL4VirtQueues am_key_virtq_conn1(to am_to_key1.init, from attestation_manager.key_recv, from key_manager.am_send);
     }
     configuration {
         // vm config
@@ -79,20 +99,29 @@ assembly {
         vm.extra_frame_map_address = 0;
         vm.linux_image_config = {};
 
-
-        // flagger w/ vm
-        flagger.recv_id = 0;
-        flagger.recv_attributes = "10";
-        flagger.recv_global_endpoint = "vm";
-        flagger.recv_badge = VIRTQUEUE_BADGE;
-        flagger.recv_shmem_size = 32768;
-        flagger.send_id = 1;
-        flagger.send_attributes = "10";
-        flagger.send_global_endpoint = "vm";
-        flagger.send_badge = VIRTQUEUE_BADGE;
+        // flagger config
         flagger.ping_wait_global_endpoint = "flagger";
         flagger.self_global_endpoint = "flagger";
-        flagger.send_shmem_size = 32768;
+
+        // attestation_manager config
+        attestation_manager.msg_wait_global_endpoint = "attestation_manager";
+        attestation_manager.self_global_endpoint = "attestation_manager";
+
+        // key_manager config
+        key_manager.msg_wait_global_endpoint = "key_manager";
+        key_manager.self_global_endpoint = "key_manager";
+
+        // flagger w/ vm
+        flagger.vm_recv_id = 0;
+        flagger.vm_recv_attributes = "10";
+        flagger.vm_recv_global_endpoint = "vm";
+        flagger.vm_recv_badge = VIRTQUEUE_BADGE;
+        flagger.vm_recv_shmem_size = 32768;
+        flagger.vm_send_id = 1;
+        flagger.vm_send_attributes = "10";
+        flagger.vm_send_global_endpoint = "vm";
+        flagger.vm_send_badge = VIRTQUEUE_BADGE;
+        flagger.vm_send_shmem_size = 32768;
 
         vm.recv_id = 0;
         vm.recv_attributes = "10";
@@ -105,8 +134,8 @@ assembly {
         vm.send_badge = VIRTQUEUE_BADGE;
         vm.send_shmem_size = 32768;
 
-        ping_vqinit0.init_topology = [{ "drv" : "flagger.send", "dev" : "vm.recv"}];
-        ping_vqinit1.init_topology = [{ "drv" : "vm.send", "dev" : "flagger.recv"}];
+        flagger_to_vm0.init_topology = [{ "drv" : "flagger.vm_send", "dev" : "vm.recv"}];
+        flagger_to_vm1.init_topology = [{ "drv" : "vm.send", "dev" : "flagger.vm_recv"}];
 
         // flagger w/ key manager
         flagger.key_recv_id = 2;
@@ -120,19 +149,19 @@ assembly {
         flagger.key_send_badge = VIRTQUEUE_BADGE;
         flagger.key_send_shmem_size = 32768;
 
-        key_manager.recv_id = 0;
-        key_manager.recv_attributes = "10";
-        key_manager.recv_global_endpoint = "flagger";
-        key_manager.recv_badge = VIRTQUEUE_BADGE;
-        key_manager.recv_shmem_size = 32768;
-        key_manager.send_id = 1;
-        key_manager.send_attributes = "10";
-        key_manager.send_global_endpoint = "flagger";
-        key_manager.send_badge = VIRTQUEUE_BADGE;
-        key_manager.send_shmem_size = 32768;
+        key_manager.flagger_recv_id = 10;
+        key_manager.flagger_recv_attributes = "10";
+        key_manager.flagger_recv_global_endpoint = "flagger";
+        key_manager.flagger_recv_badge = VIRTQUEUE_BADGE;
+        key_manager.flagger_recv_shmem_size = 32768;
+        key_manager.flagger_send_id = 11;
+        key_manager.flagger_send_attributes = "10";
+        key_manager.flagger_send_global_endpoint = "flagger";
+        key_manager.flagger_send_badge = VIRTQUEUE_BADGE;
+        key_manager.flagger_send_shmem_size = 32768;
 
-        key_vqinit0.init_topology = [{ "drv" : "key_manager.send", "dev" : "flagger.key_recv"}];
-        key_vqinit1.init_topology = [{ "drv" : "flagger.key_send", "dev" : "key_manager.recv"}];
+        flagger_to_key0.init_topology = [{ "drv" : "key_manager.flagger_send", "dev" : "flagger.key_recv"}];
+        flagger_to_key1.init_topology = [{ "drv" : "flagger.key_send", "dev" : "key_manager.flagger_recv"}];
 
         // flagger w/ attestation manager
         flagger.am_recv_id = 4;
@@ -146,18 +175,44 @@ assembly {
         flagger.am_send_badge = VIRTQUEUE_BADGE;
         flagger.am_send_shmem_size = 32768;
 
-        attestation_manager.recv_id = 0;
-        attestation_manager.recv_attributes = "10";
-        attestation_manager.recv_global_endpoint = "flagger";
-        attestation_manager.recv_badge = VIRTQUEUE_BADGE;
-        attestation_manager.recv_shmem_size = 32768;
-        attestation_manager.send_id = 1;
-        attestation_manager.send_attributes = "10";
-        attestation_manager.send_global_endpoint = "flagger";
-        attestation_manager.send_badge = VIRTQUEUE_BADGE;
-        attestation_manager.send_shmem_size = 32768;
+        attestation_manager.flagger_recv_id = 20;
+        attestation_manager.flagger_recv_attributes = "10";
+        attestation_manager.flagger_recv_global_endpoint = "flagger";
+        attestation_manager.flagger_recv_badge = VIRTQUEUE_BADGE;
+        attestation_manager.flagger_recv_shmem_size = 32768;
+        attestation_manager.flagger_send_id = 21;
+        attestation_manager.flagger_send_attributes = "10";
+        attestation_manager.flagger_send_global_endpoint = "flagger";
+        attestation_manager.flagger_send_badge = VIRTQUEUE_BADGE;
+        attestation_manager.flagger_send_shmem_size = 32768;
 
-        am_vqinit0.init_topology = [{ "drv" : "attestation_manager.send", "dev" : "flagger.am_recv"}];
-        am_vqinit1.init_topology = [{ "drv" : "flagger.am_send", "dev" : "attestation_manager.recv"}];
+        flagger_to_am0.init_topology = [{ "drv" : "attestation_manager.flagger_send", "dev" : "flagger.am_recv"}];
+        flagger_to_am1.init_topology = [{ "drv" : "flagger.am_send", "dev" : "attestation_manager.flagger_recv"}];
+
+        // key manager w/ attestation manager
+        key_manager.am_recv_id = 12;
+        key_manager.am_recv_attributes = "10";
+        key_manager.am_recv_global_endpoint = "attestation_manager";
+        key_manager.am_recv_badge = VIRTQUEUE_BADGE;
+        key_manager.am_recv_shmem_size = 32768;
+        key_manager.am_send_id = 13;
+        key_manager.am_send_attributes = "10";
+        key_manager.am_send_global_endpoint = "attestation_manager";
+        key_manager.am_send_badge = VIRTQUEUE_BADGE;
+        key_manager.am_send_shmem_size = 32768;
+
+        attestation_manager.key_recv_id = 22;
+        attestation_manager.key_recv_attributes = "10";
+        attestation_manager.key_recv_global_endpoint = "key_manager";
+        attestation_manager.key_recv_badge = VIRTQUEUE_BADGE;
+        attestation_manager.key_recv_shmem_size = 32768;
+        attestation_manager.key_send_id = 23;
+        attestation_manager.key_send_attributes = "10";
+        attestation_manager.key_send_global_endpoint = "key_manager";
+        attestation_manager.key_send_badge = VIRTQUEUE_BADGE;
+        attestation_manager.key_send_shmem_size = 32768;
+
+        am_to_key0.init_topology = [{ "drv" : "attestation_manager.key_send", "dev" : "key_manager.am_recv"}];
+        am_to_key1.init_topology = [{ "drv" : "key_manager.am_send", "dev" : "attestation_manager.key_recv"}];
     }
 }

@@ -27,11 +27,15 @@
 #define ICMP_MSG_SIZE 64 - sizeof(struct icmphdr)
 #define IPV4_LENGTH 4
 
-virtqueue_device_t keyman_recv_virtqueue;
-virtqueue_driver_t keyman_send_virtqueue;
-
+virtqueue_device_t flagger_recv_virtqueue;
+virtqueue_driver_t flagger_send_virtqueue;
 void handle_recv_callback(virtqueue_device_t *vq);
 void handle_send_callback(virtqueue_driver_t *vq);
+
+virtqueue_device_t am_recv_virtqueue;
+virtqueue_driver_t am_send_virtqueue;
+void handle_am_recv_callback(virtqueue_device_t *vq);
+void handle_am_send_callback(virtqueue_driver_t *vq);
 
 unsigned short one_comp_checksum(char *data, size_t length)
 {
@@ -53,19 +57,19 @@ unsigned short one_comp_checksum(char *data, size_t length)
     return ~sum;
 }
 
-int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size)
+int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
-    int err = camkes_virtqueue_buffer_alloc(&keyman_send_virtqueue, &buf, outgoing_data_size);
+    int err = camkes_virtqueue_buffer_alloc(&destination, &buf, outgoing_data_size);
     if (err) {
         return -1;
     }
     memcpy(buf, outgoing_data, outgoing_data_size);
-    if (camkes_virtqueue_driver_send_buffer(&keyman_send_virtqueue, buf, outgoing_data_size) != 0) {
-        camkes_virtqueue_buffer_free(&keyman_send_virtqueue, buf);
+    if (camkes_virtqueue_driver_send_buffer(&destination, buf, outgoing_data_size) != 0) {
+        camkes_virtqueue_buffer_free(&destination, buf);
         return -1;
     }
-    keyman_send_virtqueue.notify();
+    destination.notify();
     return 0;
 }
 
@@ -127,7 +131,7 @@ int create_arp_req_reply(char *recv_data, size_t recv_data_size)
     arp_reply->ea_hdr.ar_hln = ETH_ALEN;
     arp_reply->ea_hdr.ar_pln = IPV4_LENGTH;
 
-    return send_outgoing_packet(reply_buffer, sizeof(struct ethhdr) + sizeof(struct ether_arp));
+    return send_outgoing_packet(reply_buffer, sizeof(struct ethhdr) + sizeof(struct ether_arp), flagger_send_virtqueue);
 }
 
 int create_icmp_req_reply(char *recv_data, size_t recv_data_size)
@@ -163,7 +167,8 @@ int create_icmp_req_reply(char *recv_data, size_t recv_data_size)
     ip_reply->check = one_comp_checksum((char *)ip_reply, sizeof(struct iphdr));
 
     return send_outgoing_packet(reply_buffer,
-                                sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_MSG_SIZE);
+                                sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_MSG_SIZE,
+                                flagger_send_virtqueue);
 }
 
 void handle_recv_data(char *recv_data, size_t recv_data_size)
@@ -195,12 +200,12 @@ void handle_recv_callback(virtqueue_device_t *vq)
         handle_recv_data((char *) buf, buf_size);
     }
 
-    if (!virtqueue_add_used_buf(&keyman_recv_virtqueue, &handle, 0)) {
-        ZF_LOGE("Unable to enqueue used recv buffer");
+    if (!virtqueue_add_used_buf(&flagger_recv_virtqueue, &handle, 0)) {
+        ZF_LOGE("Unable to enqueue used flagger_recv buffer");
         return;
     }
 
-    keyman_recv_virtqueue.notify();
+    flagger_recv_virtqueue.notify();
 }
 
 void handle_send_callback(virtqueue_driver_t *vq)
@@ -220,15 +225,62 @@ void handle_send_callback(virtqueue_driver_t *vq)
     }
 }
 
-
-void ping_wait_callback(void)
+void handle_am_recv_callback(virtqueue_device_t *vq)
 {
-    if (VQ_DEV_POLL(&keyman_recv_virtqueue)) {
-        handle_recv_callback(&keyman_recv_virtqueue);
+    void *buf = NULL;
+    size_t buf_size = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_available_buf(vq, &handle)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
     }
 
-    if (VQ_DRV_POLL(&keyman_send_virtqueue)) {
-        handle_send_callback(&keyman_send_virtqueue);
+    while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        handle_recv_data((char *) buf, buf_size);
+    }
+
+    if (!virtqueue_add_used_buf(&flagger_recv_virtqueue, &handle, 0)) {
+        ZF_LOGE("Unable to enqueue used flagger_recv buffer");
+        return;
+    }
+
+    flagger_recv_virtqueue.notify();
+}
+
+void handle_am_send_callback(virtqueue_driver_t *vq)
+{
+    void *buf = NULL;
+    size_t buf_size = 0, wr_len = 0;
+    vq_flags_t flag;
+    virtqueue_ring_object_t handle;
+    if (!virtqueue_get_used_buf(vq, &handle, &wr_len)) {
+        ZF_LOGE("Client virtqueue dequeue failed");
+        return;
+    }
+
+    while (camkes_virtqueue_driver_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
+        /* Clean up and free the buffer we allocated */
+        camkes_virtqueue_buffer_free(vq, buf);
+    }
+}
+
+void msg_wait_callback(void)
+{
+    if (VQ_DEV_POLL(&flagger_recv_virtqueue)) {
+        handle_recv_callback(&flagger_recv_virtqueue);
+    }
+
+    if (VQ_DRV_POLL(&flagger_send_virtqueue)) {
+        handle_send_callback(&flagger_send_virtqueue);
+    }
+
+    if (VQ_DEV_POLL(&am_recv_virtqueue)) {
+        handle_am_recv_callback(&am_recv_virtqueue);
+    }
+
+    if (VQ_DRV_POLL(&am_send_virtqueue)) {
+        handle_am_send_callback(&am_send_virtqueue);
     }
 }
 
@@ -236,24 +288,42 @@ int run(void)
 {
     ZF_LOGE("Starting key manager component");
 
+    // for flagger!
     /* Initialise recv virtqueue */
-    int err = camkes_virtqueue_device_init(&keyman_recv_virtqueue, 0);
+    int err = camkes_virtqueue_device_init(&flagger_recv_virtqueue, 10);
     if (err) {
-        ZF_LOGE("Unable to initialise key_recv virtqueue");
+        ZF_LOGE("Unable to initialise flagger_recv virtqueue");
         return 1;
     }
 
     /* Initialise send virtqueue */
-    err = camkes_virtqueue_driver_init(&keyman_send_virtqueue, 1);
+    err = camkes_virtqueue_driver_init(&flagger_send_virtqueue, 11);
     if (err) {
-        ZF_LOGE("Unable to initialise key_send virtqueue");
+        ZF_LOGE("Unable to initialise flagger_send virtqueue");
+        return 1;
+    }
+
+    // for am!
+    /* Initialise recv virtqueue */
+    err = camkes_virtqueue_device_init(&am_recv_virtqueue, 12);
+    if (err) {
+        ZF_LOGE("Unable to initialise key_am_recv virtqueue");
+        return 1;
+    }
+
+    /* Initialise am_send virtqueue */
+    err = camkes_virtqueue_driver_init(&am_send_virtqueue, 13);
+    if (err) {
+        ZF_LOGE("Unable to initialise key_am_send virtqueue");
         return 1;
     }
 
     // send a packet to ping_client "greetings"
+    /*
     char* test = "Greetings!";
     size_t test_len = strlen(test);
-    send_outgoing_packet( test, test_len );
+    send_outgoing_packet( test, test_len, flagger_send_virtqueue );
+    */
 
     return 0;
 }
