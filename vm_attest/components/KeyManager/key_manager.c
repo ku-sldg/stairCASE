@@ -237,14 +237,14 @@ int run(void)
     ZF_LOGE("Starting key manager component");
 
     /* Initialise recv virtqueue */
-    int err = camkes_virtqueue_device_init(&keyman_recv_virtqueue, 4);
+    int err = camkes_virtqueue_device_init(&keyman_recv_virtqueue, 0);
     if (err) {
         ZF_LOGE("Unable to initialise key_recv virtqueue");
         return 1;
     }
 
     /* Initialise send virtqueue */
-    err = camkes_virtqueue_driver_init(&keyman_send_virtqueue, 5);
+    err = camkes_virtqueue_driver_init(&keyman_send_virtqueue, 1);
     if (err) {
         ZF_LOGE("Unable to initialise key_send virtqueue");
         return 1;

@@ -81,9 +81,9 @@ CAmkESAddImportPath(${KernelARMPlatform})
 
 # Declare root server
 DeclareCAmkESComponent(
-    PingClient
+    Flagger
     SOURCES
-    components/PingClient/ping_client.c
+    components/Flagger/flagger.c
     LIBS
     virtqueue
     sel4_autoconf
@@ -92,7 +92,7 @@ DeclareCAmkESComponent(
 DeclareCAmkESComponent(
     ComponentAM
     SOURCES
-    #components/PingClient/ping_client.c
+    components/ComponentAM/attestation_manager.c
     LIBS
     virtqueue
     sel4_autoconf
@@ -108,7 +108,7 @@ DeclareCAmkESComponent(
 )
 
 DeclareCAmkESRootserver(
-    vm_echo_ping.camkes
+    vm_attest.camkes
     CPP_FLAGS
     ${cpp_flags}
     CPP_INCLUDES

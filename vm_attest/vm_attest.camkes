@@ -1,0 +1,163 @@
+/*
+ * Copyright 2019, Data61
+ * Commonwealth Scientific and Industrial Research Organisation (CSIRO)
+ * ABN 41 687 119 230.
+ *
+ * This software may be distributed and modified according to the terms of
+ * the BSD 2-Clause license. Note that NO WARRANTY is provided.
+ * See "LICENSE_BSD2.txt" for details.
+ *
+ * @TAG(DATA61_BSD)
+ */
+
+import <std_connector.camkes>;
+import <vm-connectors.camkes>;
+import <VM/vm_common.camkes>;
+import <devices.camkes>;
+import <VirtQueue/VirtQueue.camkes>;
+
+#define VIRTQUEUE_BADGE 2
+
+component Flagger {
+    control;
+    /* Virtqueue connection for send and recv */
+    uses VirtQueueDev recv;
+    uses VirtQueueDrv send;
+
+    uses VirtQueueDev key_recv;
+    uses VirtQueueDrv key_send;
+
+    uses VirtQueueDev am_recv;
+    uses VirtQueueDrv am_send;
+
+    emits Callback self;
+    consumes Callback ping_wait;
+}
+
+component ComponentAM {
+    control;
+    // Virtqueue connection for send and recv
+    uses VirtQueueDev recv;
+    uses VirtQueueDrv send;
+}
+
+component KeyManager {
+    control;
+    // Virtqueue connection for send and recv
+    uses VirtQueueDev recv;
+    uses VirtQueueDrv send;
+}
+
+assembly {
+    composition {
+        component Flagger flagger;
+        component ComponentAM attestation_manager;
+        component KeyManager key_manager;
+        component VirtQueueInit ping_vqinit0;
+        component VirtQueueInit ping_vqinit1;
+        component VirtQueueInit key_vqinit0;
+        component VirtQueueInit key_vqinit1;
+        component VirtQueueInit am_vqinit0;
+        component VirtQueueInit am_vqinit1;
+
+        connection seL4GlobalAsynchCallback ping_global_callback(from flagger.self, to flagger.ping_wait);
+        connection seL4VMDTBPassthrough vm_dtb(from vm.dtb_self, to vm.dtb);
+
+        connection seL4VirtQueues ping_virtq_conn0(to ping_vqinit0.init, from flagger.send, from vm.recv);
+        connection seL4VirtQueues ping_virtq_conn1(to ping_vqinit1.init, from flagger.recv, from vm.send);
+
+        connection seL4VirtQueues key_virtq_conn0(to key_vqinit0.init, from key_manager.send, from flagger.key_recv);
+        connection seL4VirtQueues key_virtq_conn1(to key_vqinit1.init, from key_manager.recv, from flagger.key_send);
+
+        connection seL4VirtQueues am_virtq_conn0(to am_vqinit0.init, from attestation_manager.send, from flagger.am_recv);
+        connection seL4VirtQueues am_virtq_conn1(to am_vqinit1.init, from attestation_manager.recv, from flagger.am_send);
+
+    }
+    configuration {
+        // vm config
+        vm.num_extra_frame_caps = 0;
+        vm.extra_frame_map_address = 0;
+        vm.linux_image_config = {};
+
+
+        // flagger w/ vm
+        flagger.recv_id = 0;
+        flagger.recv_attributes = "10";
+        flagger.recv_global_endpoint = "vm";
+        flagger.recv_badge = VIRTQUEUE_BADGE;
+        flagger.recv_shmem_size = 32768;
+        flagger.send_id = 1;
+        flagger.send_attributes = "10";
+        flagger.send_global_endpoint = "vm";
+        flagger.send_badge = VIRTQUEUE_BADGE;
+        flagger.ping_wait_global_endpoint = "flagger";
+        flagger.self_global_endpoint = "flagger";
+        flagger.send_shmem_size = 32768;
+
+        vm.recv_id = 0;
+        vm.recv_attributes = "10";
+        vm.recv_global_endpoint = "flagger";
+        vm.recv_badge = VIRTQUEUE_BADGE;
+        vm.recv_shmem_size = 32768;
+        vm.send_id = 1;
+        vm.send_attributes = "10";
+        vm.send_global_endpoint = "flagger";
+        vm.send_badge = VIRTQUEUE_BADGE;
+        vm.send_shmem_size = 32768;
+
+        ping_vqinit0.init_topology = [{ "drv" : "flagger.send", "dev" : "vm.recv"}];
+        ping_vqinit1.init_topology = [{ "drv" : "vm.send", "dev" : "flagger.recv"}];
+
+        // flagger w/ key manager
+        flagger.key_recv_id = 2;
+        flagger.key_recv_attributes = "10";
+        flagger.key_recv_global_endpoint = "key_manager";
+        flagger.key_recv_badge = VIRTQUEUE_BADGE;
+        flagger.key_recv_shmem_size = 32768;
+        flagger.key_send_id = 3;
+        flagger.key_send_attributes = "10";
+        flagger.key_send_global_endpoint = "key_manager";
+        flagger.key_send_badge = VIRTQUEUE_BADGE;
+        flagger.key_send_shmem_size = 32768;
+
+        key_manager.recv_id = 0;
+        key_manager.recv_attributes = "10";
+        key_manager.recv_global_endpoint = "flagger";
+        key_manager.recv_badge = VIRTQUEUE_BADGE;
+        key_manager.recv_shmem_size = 32768;
+        key_manager.send_id = 1;
+        key_manager.send_attributes = "10";
+        key_manager.send_global_endpoint = "flagger";
+        key_manager.send_badge = VIRTQUEUE_BADGE;
+        key_manager.send_shmem_size = 32768;
+
+        key_vqinit0.init_topology = [{ "drv" : "key_manager.send", "dev" : "flagger.key_recv"}];
+        key_vqinit1.init_topology = [{ "drv" : "flagger.key_send", "dev" : "key_manager.recv"}];
+
+        // flagger w/ attestation manager
+        flagger.am_recv_id = 4;
+        flagger.am_recv_attributes = "10";
+        flagger.am_recv_global_endpoint = "attestation_manager";
+        flagger.am_recv_badge = VIRTQUEUE_BADGE;
+        flagger.am_recv_shmem_size = 32768;
+        flagger.am_send_id = 5;
+        flagger.am_send_attributes = "10";
+        flagger.am_send_global_endpoint = "attestation_manager";
+        flagger.am_send_badge = VIRTQUEUE_BADGE;
+        flagger.am_send_shmem_size = 32768;
+
+        attestation_manager.recv_id = 0;
+        attestation_manager.recv_attributes = "10";
+        attestation_manager.recv_global_endpoint = "flagger";
+        attestation_manager.recv_badge = VIRTQUEUE_BADGE;
+        attestation_manager.recv_shmem_size = 32768;
+        attestation_manager.send_id = 1;
+        attestation_manager.send_attributes = "10";
+        attestation_manager.send_global_endpoint = "flagger";
+        attestation_manager.send_badge = VIRTQUEUE_BADGE;
+        attestation_manager.send_shmem_size = 32768;
+
+        am_vqinit0.init_topology = [{ "drv" : "attestation_manager.send", "dev" : "flagger.am_recv"}];
+        am_vqinit1.init_topology = [{ "drv" : "flagger.am_send", "dev" : "attestation_manager.recv"}];
+    }
+}
