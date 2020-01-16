@@ -16,7 +16,7 @@ To do:
 * demonstrate comms from comp1 -> comp2 -> vm (done)
 
 Notes:
-It appears as though there can be at most 1 component which communicates with the linux vm. That is, a ping to any 192.168.1.xxx address will reach the ping component.
+It appears as though there can be at most 1 component which communicates with the linux vm. That is, a ping to any address on the subnet for which eth0 is configured will be delivered irrespective of the destination address. It is not clear to me whether another ethX connection can be established with another component.
 
 It appears as though the ID for a virtqueue can be no greater than 100.
 
