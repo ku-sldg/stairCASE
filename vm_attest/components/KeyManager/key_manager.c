@@ -29,8 +29,8 @@
 
 virtqueue_device_t flagger_recv_virtqueue;
 virtqueue_driver_t flagger_send_virtqueue;
-void handle_recv_callback(virtqueue_device_t *vq);
-void handle_send_callback(virtqueue_driver_t *vq);
+void handle_flagger_recv_callback(virtqueue_device_t *vq);
+void handle_flagger_send_callback(virtqueue_driver_t *vq);
 
 virtqueue_device_t am_recv_virtqueue;
 virtqueue_driver_t am_send_virtqueue;
@@ -185,7 +185,7 @@ void handle_recv_data(char *recv_data, size_t recv_data_size)
 
 }
 
-void handle_recv_callback(virtqueue_device_t *vq)
+void handle_flagger_recv_callback(virtqueue_device_t *vq)
 {
     void *buf = NULL;
     size_t buf_size = 0;
@@ -208,7 +208,7 @@ void handle_recv_callback(virtqueue_device_t *vq)
     flagger_recv_virtqueue.notify();
 }
 
-void handle_send_callback(virtqueue_driver_t *vq)
+void handle_flagger_send_callback(virtqueue_driver_t *vq)
 {
     void *buf = NULL;
     size_t buf_size = 0, wr_len = 0;
@@ -241,7 +241,7 @@ void handle_am_recv_callback(virtqueue_device_t *vq)
     }
 
     if (!virtqueue_add_used_buf(&flagger_recv_virtqueue, &handle, 0)) {
-        ZF_LOGE("Unable to enqueue used flagger_recv buffer");
+        ZF_LOGE("Unable to enqueue used am_recv buffer");
         return;
     }
 
@@ -268,11 +268,11 @@ void handle_am_send_callback(virtqueue_driver_t *vq)
 void msg_wait_callback(void)
 {
     if (VQ_DEV_POLL(&flagger_recv_virtqueue)) {
-        handle_recv_callback(&flagger_recv_virtqueue);
+        handle_flagger_recv_callback(&flagger_recv_virtqueue);
     }
 
     if (VQ_DRV_POLL(&flagger_send_virtqueue)) {
-        handle_send_callback(&flagger_send_virtqueue);
+        handle_flagger_send_callback(&flagger_send_virtqueue);
     }
 
     if (VQ_DEV_POLL(&am_recv_virtqueue)) {
