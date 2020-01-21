@@ -37,26 +37,6 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
-unsigned short one_comp_checksum(char *data, size_t length)
-{
-    unsigned int sum = 0;
-    int i = 0;
-
-    for (i = 0; i < length - 1; i += 2) {
-        unsigned short *data_word = (unsigned short *)&data[i];
-        sum += *data_word;
-    }
-    /* Odd size */
-    if (length % 2) {
-        unsigned short data_word = (unsigned char)data[i];
-        sum += data_word;
-    }
-
-    sum = (sum >> 16) + (sum & 0xFFFF);
-    sum += (sum >> 16);
-    return ~sum;
-}
-
 int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
@@ -98,79 +78,6 @@ void print_ip_packet(void *ip_buf, size_t ip_length)
     printf("\n");
 }
 
-int create_arp_req_reply(char *recv_data, size_t recv_data_size)
-{
-    unsigned char reply_buffer[ETHERMTU];
-
-    struct ethhdr *rcv_req = (struct ethhdr *) recv_data;
-    struct ether_arp *arp_req = (struct ether_arp *)(recv_data + sizeof(struct ethhdr));
-
-    struct ethhdr *send_reply = (struct ethhdr *) reply_buffer;
-    struct ether_arp *arp_reply = (struct ether_arp *)(reply_buffer + sizeof(struct ethhdr));
-
-    memcpy(send_reply->h_dest, arp_req->arp_sha, ETH_ALEN);
-    send_reply->h_proto = htons(ETH_P_ARP);
-
-    /* MAC Address */
-    memcpy(arp_reply->arp_tha, arp_req->arp_sha, ETH_ALEN);
-    memcpy(arp_reply->arp_sha, arp_req->arp_sha, ETH_ALEN);
-    arp_reply->arp_sha[5] = arp_reply->arp_sha[5] + 2;
-
-    memcpy(send_reply->h_source, arp_reply->arp_sha, ETH_ALEN);
-    /* IP Addresss */
-    for (int i = 0; i < IPV4_LENGTH; i++) {
-        arp_reply->arp_spa[i] = arp_req->arp_tpa[i];
-    }
-    for (int i = 0; i < IPV4_LENGTH; i++) {
-        arp_reply->arp_tpa[i] = arp_req->arp_spa[i];
-    }
-    /* ARP header fields */
-    arp_reply->ea_hdr.ar_hrd = htons(ARPHRD_ETHER);
-    arp_reply->ea_hdr.ar_pro = htons(ETH_P_IP);
-    arp_reply->ea_hdr.ar_op = htons(ARPOP_REPLY);
-    arp_reply->ea_hdr.ar_hln = ETH_ALEN;
-    arp_reply->ea_hdr.ar_pln = IPV4_LENGTH;
-
-    return send_outgoing_packet(reply_buffer, sizeof(struct ethhdr) + sizeof(struct ether_arp), flagger_send_virtqueue);
-}
-
-int create_icmp_req_reply(char *recv_data, size_t recv_data_size)
-{
-
-    struct ethhdr *eth_req = (struct ethhdr *) recv_data;
-    struct iphdr *ip_req = (struct iphdr *)(recv_data + sizeof(struct ethhdr));
-    struct icmphdr *icmp_req = (struct icmphdr *)(recv_data + sizeof(struct ethhdr) + sizeof(struct iphdr));
-
-    unsigned char reply_buffer[ETHERMTU];
-    struct ethhdr *eth_reply = (struct ethhdr *) reply_buffer;
-    struct iphdr *ip_reply = (struct iphdr *)(reply_buffer + sizeof(struct ethhdr));
-    struct icmphdr *icmp_reply = (struct icmphdr *)(reply_buffer + sizeof(struct ethhdr) + sizeof(struct iphdr));
-    char *icmp_msg = (char *)(icmp_reply + 1);
-
-    memcpy(eth_reply->h_dest, eth_req->h_source, ETH_ALEN);
-    memcpy(eth_reply->h_source, eth_req->h_dest, ETH_ALEN);
-    eth_reply->h_proto = htons(ETH_P_IP);
-
-    memcpy(ip_reply, ip_req, sizeof(struct iphdr));
-    in_addr_t saddr = ip_reply->saddr;
-    ip_reply->saddr = ip_reply->daddr;
-    ip_reply->daddr = saddr;
-
-    memset(icmp_msg, 0, ICMP_MSG_SIZE);
-    icmp_reply->un.echo.sequence =  icmp_req->un.echo.sequence;
-    icmp_reply->un.echo.id = icmp_req->un.echo.id;
-    icmp_reply->type = ICMP_ECHOREPLY;
-    icmp_reply->checksum = one_comp_checksum((char *)icmp_reply, sizeof(struct icmphdr) + ICMP_MSG_SIZE);
-
-    /* Need to set checksum to 0 before calculating checksum of the header */
-    ip_reply->check = 0;
-    ip_reply->check = one_comp_checksum((char *)ip_reply, sizeof(struct iphdr));
-
-    return send_outgoing_packet(reply_buffer,
-                                sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_MSG_SIZE,
-                                flagger_send_virtqueue);
-}
-
 void handle_recv_data(char *recv_data, size_t recv_data_size)
 {
     struct ethhdr *rcv_req = (struct ethhdr *) recv_data;
@@ -182,7 +89,6 @@ void handle_recv_data(char *recv_data, size_t recv_data_size)
         print_ip_packet(ip_packet, recv_data_size - sizeof(struct ethhdr));
         create_icmp_req_reply(recv_data, recv_data_size);;
     }
-
 }
 
 void handle_flagger_recv_callback(virtqueue_device_t *vq)
