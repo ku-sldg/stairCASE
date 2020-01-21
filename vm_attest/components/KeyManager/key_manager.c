@@ -37,6 +37,13 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
+void issue_key( virtqueue_driver_t destination )
+{
+    // dummy key
+    char* key = "1234512345";
+    send_outgoing_packet( key, 10, destination );
+}
+
 int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
@@ -82,15 +89,15 @@ void handle_recv_data(char *recv_data, size_t recv_data_size)
 {
     struct ethhdr *rcv_req = (struct ethhdr *) recv_data;
     if (ntohs(rcv_req->h_proto) == ETH_P_ARP) {
-        create_arp_req_reply(recv_data, recv_data_size);
     } else if (ntohs(rcv_req->h_proto) == ETH_P_IP) {
         char ip_packet[ETHERMTU];
         memcpy(ip_packet, recv_data + sizeof(struct ethhdr), recv_data_size - sizeof(struct ethhdr));
         print_ip_packet(ip_packet, recv_data_size - sizeof(struct ethhdr));
-        create_icmp_req_reply(recv_data, recv_data_size);;
     }
 }
 
+// received from vm via flagger,
+// respond with a key
 void handle_flagger_recv_callback(virtqueue_device_t *vq)
 {
     void *buf = NULL;
@@ -103,7 +110,7 @@ void handle_flagger_recv_callback(virtqueue_device_t *vq)
     }
 
     while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
-        handle_recv_data((char *) buf, buf_size);
+        issue_key( flagger_send_virtqueue );
     }
 
     if (!virtqueue_add_used_buf(&flagger_recv_virtqueue, &handle, 0)) {
