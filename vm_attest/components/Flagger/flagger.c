@@ -42,6 +42,31 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
+void flag_packet(char* packet, size_t packet_size)
+{
+    // always forward to am for now
+    
+    // First 4 characters of the packet (ignoring the ethernet header) specify
+    // the destination component to which the packet will be forwarded
+    
+    char payload[ETHERMTU];
+    memcpy( payload, packet + sizeof(struct ethhdr), packet_size - sizeof(struct ethhdr) );
+
+    char dest[4];
+    memcpy( dest, payload, 4 );
+
+    if( strcmp( dest, "KEYM" ) == 0 )
+    {
+        ZF_LOGE("Got a packet, sending to Key Manager...");
+        send_outgoing_packet( packet, packet_size, key_send_virtqueue );
+        return;
+    }
+
+    ZF_LOGE("Got a packet, sending to AM...");
+    send_outgoing_packet( packet, packet_size, am_send_virtqueue );
+    return;
+}
+
 int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
@@ -100,9 +125,7 @@ void handle_recv_callback(virtqueue_device_t *vq)
     }
 
     while (camkes_virtqueue_device_gather_buffer(vq, &handle, &buf, &buf_size, &flag) >= 0) {
-        // always forward to am for now
-        ZF_LOGE("Got a packet, sending to AM...");
-        send_outgoing_packet( (char*) buf, buf_size, am_send_virtqueue );
+        flag_packet( (char*)buf, buf_size );
     }
 
     if (!virtqueue_add_used_buf(&vm_recv_virtqueue, &handle, 0)) {
