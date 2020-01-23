@@ -107,6 +107,17 @@ DeclareCAmkESComponent(
     sel4_autoconf
 )
 
+DeclareCAmkESComponent(
+    CakeAM
+    SOURCES
+    components/CakeAM/cakeam.c
+    CAKEML_SOURCES
+    components/CakeAM/server.cml
+    LIBS
+    virtqueue
+    sel4_autoconf
+)
+
 DeclareCAmkESRootserver(
     vm_attest.camkes
     CPP_FLAGS

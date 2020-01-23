@@ -30,6 +30,9 @@ component Flagger {
     uses VirtQueueDev am_recv;
     uses VirtQueueDrv am_send;
 
+    uses VirtQueueDev cake_recv;
+    uses VirtQueueDrv cake_send;
+
     emits Callback self;
     consumes Callback ping_wait;
 }
@@ -60,11 +63,22 @@ component KeyManager {
     consumes Callback msg_wait;
 }
 
+component CakeAM {
+    control;
+    // Virtqueue connection for send and recv
+    uses VirtQueueDev flagger_recv;
+    uses VirtQueueDrv flagger_send;
+
+    emits Callback self;
+    consumes Callback msg_wait;
+}
+
 assembly {
     composition {
         component Flagger flagger;
         component ComponentAM attestation_manager;
         component KeyManager key_manager;
+        component CakeAM cake_am;
 
         component VirtQueueInit flagger_to_vm0;
         component VirtQueueInit flagger_to_vm1;
@@ -74,10 +88,13 @@ assembly {
         component VirtQueueInit flagger_to_am1;
         component VirtQueueInit am_to_key0;
         component VirtQueueInit am_to_key1;
+        component VirtQueueInit flagger_to_cake0;
+        component VirtQueueInit flagger_to_cake1;
 
         connection seL4GlobalAsynchCallback flagger_global_callback(from flagger.self, to flagger.ping_wait);
         connection seL4GlobalAsynchCallback am_global_callback(from attestation_manager.self, to attestation_manager.msg_wait);
         connection seL4GlobalAsynchCallback key_global_callback(from key_manager.self, to key_manager.msg_wait);
+        connection seL4GlobalAsynchCallback cake_global_callback(from cake_am.self, to cake_am.msg_wait);
 
         connection seL4VMDTBPassthrough vm_dtb(from vm.dtb_self, to vm.dtb);
 
@@ -92,6 +109,9 @@ assembly {
 
         connection seL4VirtQueues am_key_virtq_conn0(to am_to_key0.init, from attestation_manager.key_send, from key_manager.am_recv);
         connection seL4VirtQueues am_key_virtq_conn1(to am_to_key1.init, from attestation_manager.key_recv, from key_manager.am_send);
+
+        connection seL4VirtQueues flagger_cake_virtq_conn0(to flagger_to_cake0.init, from cake_am.flagger_send, from flagger.cake_recv);
+        connection seL4VirtQueues flagger_cake_virtq_conn1(to flagger_to_cake1.init, from cake_am.flagger_recv, from flagger.cake_send);
     }
     configuration {
         // vm config
@@ -110,6 +130,10 @@ assembly {
         // key_manager config
         key_manager.msg_wait_global_endpoint = "key_manager";
         key_manager.self_global_endpoint = "key_manager";
+
+        // cake_am config
+        cake_am.msg_wait_global_endpoint = "cake_am";
+        cake_am.self_global_endpoint = "cake_am";
 
         // flagger w/ vm
         flagger.vm_recv_id = 0;
@@ -214,5 +238,32 @@ assembly {
 
         am_to_key0.init_topology = [{ "drv" : "attestation_manager.key_send", "dev" : "key_manager.am_recv"}];
         am_to_key1.init_topology = [{ "drv" : "key_manager.am_send", "dev" : "attestation_manager.key_recv"}];
+
+        // flagger w/ cake am
+        flagger.cake_recv_id = 6;
+        flagger.cake_recv_attributes = "10";
+        flagger.cake_recv_global_endpoint = "cake_am";
+        flagger.cake_recv_badge = VIRTQUEUE_BADGE;
+        flagger.cake_recv_shmem_size = 32768;
+        flagger.cake_send_id = 7;
+        flagger.cake_send_attributes = "10";
+        flagger.cake_send_global_endpoint = "cake_am";
+        flagger.cake_send_badge = VIRTQUEUE_BADGE;
+        flagger.cake_send_shmem_size = 32768;
+
+        cake_am.flagger_recv_id = 30;
+        cake_am.flagger_recv_attributes = "10";
+        cake_am.flagger_recv_global_endpoint = "flagger";
+        cake_am.flagger_recv_badge = VIRTQUEUE_BADGE;
+        cake_am.flagger_recv_shmem_size = 32768;
+        cake_am.flagger_send_id = 31;
+        cake_am.flagger_send_attributes = "10";
+        cake_am.flagger_send_global_endpoint = "flagger";
+        cake_am.flagger_send_badge = VIRTQUEUE_BADGE;
+        cake_am.flagger_send_shmem_size = 32768;
+
+        flagger_to_cake0.init_topology = [{ "drv" : "cake_am.flagger_send", "dev" : "flagger.cake_recv"}];
+        flagger_to_cake1.init_topology = [{ "drv" : "flagger.cake_send", "dev" : "cake_am.flagger_recv"}];
+
     }
 }

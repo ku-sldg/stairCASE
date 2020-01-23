@@ -1,0 +1,1553 @@
+(* No external dependencies *)
+
+(*
+This is an implementation for ByteStrings which somewhat resembles the Haskell
+ByteString library.
+
+It is based on the byte_array type, which underlies the Word8Array structure.
+FFI calls use the byte_array type as their second argument (typically acting
+as the return slot), making ByteStrings convenient for use with FFI.
+*)
+
+structure ByteString = struct
+    (* The type of ByteStrings - this is the same type used by Word8Array *)
+    type bs = byte_array
+
+    (* Raised by hexToByte/toHexString/unshow
+      if there exists a non-hexit char, i.e. != 0..9, a..f, or A..F *)
+    exception InvalidHexString
+
+    val zeroByte = Word8.fromInt 0
+    val empty = Word8Array.array 0 zeroByte
+
+    val length = Word8Array.length
+    fun isEmpty bs = length bs = 0
+
+    local
+        val maskUpper = Word8.fromInt 15 (* = 0x0F = 0b00001111 *)
+        val hexits = Array.fromList ["0","1","2","3","4","5","6","7","8","9",
+                                     "A","B","C","D","E","F"]
+        val getHexit = Array.sub hexits
+    in
+        (* word8 -> 2-char string *)
+        fun byteToHex b =
+            let val top = Word8.toInt (Word8.>> b 4)
+                val bot = Word8.toInt (Word8.andb b maskUpper)
+             in getHexit top ^ getHexit bot
+            end
+    end
+
+    (* 2-char string -> word8, Inverse of byteToHex.
+       This will silently crash if the string you give it isn't at least 2 chars
+       long. You've been warned! *)
+    local
+        val bytes = Array.tabulate 16 Word8.fromInt
+        fun hexMap h = case h
+          of #"0" => 0  | #"1" => 1  | #"2" => 2  | #"3" => 3  | #"4" => 4
+           | #"5" => 5  | #"6" => 6  | #"7" => 7  | #"8" => 8  | #"9" => 9
+           | #"a" => 10 | #"A" => 10 | #"b" => 11 | #"B" => 11
+           | #"c" => 12 | #"C" => 12 | #"d" => 13 | #"D" => 13
+           | #"e" => 14 | #"E" => 14 | #"f" => 15 | #"F" => 15
+           |   _  => raise InvalidHexString
+        val getHalfByte = Array.sub bytes o hexMap
+    in
+        fun hexToByte s =
+            let val top = String.sub s 0
+                val bot = String.sub s 1
+             in Word8.orb (Word8.<< (getHalfByte top) 4) (getHalfByte bot)
+            end
+    end
+
+    (* (a -> word8 -> a) -> a -> byte_array -> a *)
+    fun foldl f z bs =
+        let val len = length bs
+            fun foldl_aux z' i = if i < len
+                then foldl_aux (f z' (Word8Array.sub bs i)) (i+1)
+                else z'
+         in foldl_aux z 0
+        end
+
+    (* (int -> a -> word8 -> a) -> a -> byte_array -> a *)
+    fun foldli f z bs =
+        let val len = length bs
+            fun foldli_aux z' i = if i < len
+                then foldli_aux (f i z' (Word8Array.sub bs i)) (i+1)
+                else z'
+         in foldli_aux z 0
+        end
+
+    (* (word8 -> a -> a) -> a -> byte_array -> a *)
+    fun foldr f z bs =
+        let val len = length bs
+            fun foldr_aux z' i = if i < len
+                then f (Word8Array.sub bs i) (foldr_aux z' (i+1))
+                else z'
+         in foldr_aux z 0
+        end
+
+    (* (int -> word8 -> a -> a) -> a -> byte_array -> a *)
+    fun foldri f z bs =
+        let val len = length bs
+            fun foldri_aux z' i = if i < len
+                then f i (Word8Array.sub bs i) (foldri_aux z' (i+1))
+                else z
+         in foldri_aux z 0
+        end
+
+    (* Previously called `toString`, changed to emphasize the distinction
+       between this and `toRawString`. The "0x" prefix was also dropped,
+       since it didn't seem to add much and made parsing more difficult. *)
+    val toHexString = foldr ((op ^) o byteToHex) ""
+
+    (* This function is ideal for pretty printing byte strings. It gives
+       you a hex string along with the "0x" prefix *)
+    fun show bs = "0x" ^ toHexString bs
+
+    fun fromHexString s =
+        let val len = String.size s div 2
+            val arr = Word8Array.array len zeroByte
+            fun fromHexString_aux i =
+                if i < len then (
+                    Word8Array.update arr i (hexToByte (String.substring s (2*i) 2));
+                    fromHexString_aux (i+1)
+                ) else arr
+         in fromHexString_aux 0
+        end
+
+    fun unshow s =
+        if (String.isPrefix "0x" s) orelse (String.isPrefix "0X" s)
+        then fromHexString (String.substring s 2 ((String.size s) - 2))
+        else raise InvalidHexString
+
+    (* Essentially a naive casting operation. This function is meant for use
+       with FFI functions. Don't use this to print ByteStrings, you'll
+       probably have some unprintable characters in the string. Use toHexString
+       or show instead. *)
+    fun toRawString bs = Word8Array.substring bs 0 (length bs)
+
+    (* Inverse of toRawString *)
+    fun fromRawString s =
+        let val size = String.size s
+            val arr = Word8Array.array size (Word8.fromInt 0)
+         in Word8Array.copyVec s 0 size arr 0;
+            arr
+        end
+
+    fun copy bs =
+        let val bsLen = length bs
+            val arr = Word8Array.array bsLen zeroByte
+         in Word8Array.copy bs 0 bsLen arr 0;
+            arr
+        end
+
+    fun deepEq bs1 bs2 =
+        let val len = length bs1
+            fun deepEq_aux i =
+                i >= len orelse (
+                    Word8Array.sub bs1 i = Word8Array.sub bs2 i
+                    andalso deepEq_aux (i+1)
+                )
+         in len = length bs2 andalso deepEq_aux 0
+        end
+
+    fun append bs1 bs2 =
+        let val bs1Len = length bs1
+            val bs2Len = length bs2
+            val arr = Word8Array.array (bs1Len + bs2Len) zeroByte
+         in Word8Array.copy bs1 0 bs1Len arr 0;
+            Word8Array.copy bs2 0 bs2Len arr bs1Len;
+            arr
+        end
+
+    (* Warning: the next two functions are very ad hoc *)
+
+    (* bs1 and bs2 should be the same size. If they aren't, the returned
+       ByteString will be the size of the smaller input, and the xor will
+       be performed from the left side (e.g. 0x00F xor 0xFF = 0xFF). *)
+    fun xor bs1 bs2 =
+        let val len = min (length bs1) (length bs2)
+            val arr = Word8Array.array len zeroByte
+            fun xor_aux i =
+                if i < len then (
+                    Word8Array.update arr i (Word8.xorb (Word8Array.sub bs1 i) (Word8Array.sub bs2 i));
+                    xor_aux (i+1)
+                ) else arr
+         in xor_aux 0
+        end
+
+    (* Treats the ByteString as an abitrary length integer and adds n,
+       Returns the same byte_array, whose value has been _mutated_.
+       Overflow results in wrap around, e.g. `addInt 0xFF 1` ~> `0x00` *)
+    fun addInt bs n =
+        let val base = 256
+            fun addInt_aux bs n i =
+                if n <= 0 orelse i < 0
+                then bs
+                else let val sum = (Word8.toInt (Word8Array.sub bs i)) + (n mod base)
+                      in Word8Array.update bs i (Word8.fromInt (sum mod base));
+                         addInt_aux bs ((n div base) + (sum div base)) (i - 1)
+                     end
+         in addInt_aux bs n (length bs - 1)
+        end
+
+    (* Quick and dirty maps to parameterized array type *)
+    fun cons h t = h :: t
+
+    val toList = foldr cons []
+    val fromList = List.foldr (append o Word8Array.array 1) empty
+
+    fun map f = Array.fromList o List.map f o toList
+    fun unmap f = fromList o List.map f o Array.foldr cons []
+end
+(* Depends on: ByteString.sml *)
+
+(* Safe wrappers to FFI crypto functions *)
+structure Crypto = struct
+    exception Err
+
+    local
+        val ffiSuccess = Word8.fromInt 0
+        val ffiFailure = Word8.fromInt 1
+    in
+        fun hash bs =
+            let
+                val result = Word8Array.array 64 (Word8.fromInt 0)
+            in
+                #(sha512) (ByteString.toRawString bs) result;
+                result
+            end
+
+        fun hashStr s =
+            let
+                val result = Word8Array.array 64 (Word8.fromInt 0)
+            in
+                #(sha512) s result;
+                result
+            end
+
+        fun signMsg msg =
+            let
+                val result = Word8Array.array 256 (Word8.fromInt 0)
+            in
+                #(signMsg) (ByteString.toRawString msg) result;
+                result
+            end
+
+        fun sigCheck sign msg pubMod pubExp =
+            let
+                val result  = Word8Array.array 1 (Word8.fromInt 0)
+                val payload = (ByteString.toRawString sign) ^
+                              (ByteString.toRawString (hash msg)) ^
+                              pubMod ^ ":" ^ pubExp ^ ":"
+            in
+                #(sigCheck) payload result;
+                Word8Array.sub result 0 = ffiSuccess
+            end
+
+        (* len is length of nonce in bytes *)
+        fun urand len =
+            let
+                val buffer = Word8Array.array (len+1) (Word8.fromInt 0)
+                val result = Word8Array.array len (Word8.fromInt 0)
+            in
+                #(urand) "" buffer;
+                (if Word8Array.sub buffer 0 = ffiFailure
+                    then raise Err
+                    else Word8Array.copy buffer 1 8 result 0);
+                result
+            end
+
+        fun aes256_xkey key =
+            let
+                val result = Word8Array.array 240 (Word8.fromInt 0)
+            in
+                #(aes256_expand_key) key result;
+                result
+            end
+
+        fun aes256 pt xkey =
+            let
+                val result = Word8Array.array 16 (Word8.fromInt 0)
+            in
+                #(aes256) (pt ^ xkey) result;
+                result
+            end
+    end
+end
+(* Depends on: ByteString.sml, crypto/CryptoFFI.sml *)
+
+(* Currently doesn't expose any functions for explicitly decrypting data,
+   although you could achieve decryption by creating another Aes256Ctr with the
+   same key/nonce and "encrypt" the encrypted block sequence in order. *)
+structure Aes256Ctr = struct
+    local
+        val xkeyFromKeyBs = ByteString.toRawString o Crypto.aes256_xkey o ByteString.toRawString
+    in
+        (* (xkey, nonce, ctr) *)
+        type ctr = ByteString.bs * ByteString.bs * ByteString.bs
+
+        (* key should be 32 bytes, nonce should be 16*)
+        fun init key nonce = (xkeyFromKeyBs key, nonce, ByteString.copy nonce)
+
+        (* The first half of CTR mode block encryption. Generates the block
+           that the plaintext is XORed against. It is exposed as its own
+           function for the benefit of the CTR DRBG, which does not make use of
+           the XORing. *)
+        fun encrCtr (xkey, _, ctr) =
+            let
+                val out = Crypto.aes256 (ByteString.toRawString ctr) xkey
+                val _ = ByteString.addInt ctr 1
+            in
+                out
+            end
+
+        (* Full block encryption *)
+        fun encrBlock aes block = ByteString.xor (encrCtr aes) block
+    end
+end
+(* Depends on: crypto/Aes256.sml, crypto/CryptoFFI.sml *)
+
+(*
+A Deterministic Random Bit Generator (DRBG) based on the AES-256 block cipher
+in the counter (CTR) mode of operation. Specified by NIST (see section 10.2):
+    https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-90Ar1.pdf
+
+This implementation is slightly simplified compared to the above specification.
+E.G. it will always generate 16 random bytes, rather than letting you specify
+how many you want. The underlying mechanics are the same, though. We make
+syscalls to get random values for our key and counter (together acting as our
+seed), and then simply operate the AES-256 in CTR mode (conceptually encrypting
+zero blocks).
+*)
+structure Aes256CtrDrbg = struct
+    type drbg = (Aes256Ctr.ctr * int) ref
+
+    (* Reseed after 2^16 generations. This is very conservative, compared to
+       the 2^48 max provided by the NIST document *)
+    val max_count = 65536
+
+    fun init () = (Aes256Ctr.init (Crypto.urand 32) (Crypto.urand 16), 0)
+
+    fun reseed drbg = drbg := (init ())
+
+    fun genBits drbg =
+        let
+            val (ctr, count) = !drbg
+        in
+            if count >= max_count
+                then
+                    (reseed drbg;
+                    genBits drbg)
+                else
+                    Aes256Ctr.encrCtr ctr
+        end
+end
+
+
+local
+    val dbgr = Ref (Aes256CtrDrbg.init ())
+in
+    (* Returns 16 random bytes. TODO: take number of bytes as an argument *)
+    fun rand () = Aes256CtrDrbg.genBits dbgr
+end
+(* Depends on: ByteString.sml *)
+
+(* Safe(ish) wrapper to FFI socket functions *)
+structure Socket = struct
+    (* Generic socket exception *)
+    exception Err
+
+    local
+        (* Shared/reused buffers *)
+        val fdbuf = Word8Array.array 9 (Word8.fromInt 0)
+        val cbuf = Word8Array.array 2 (Word8.fromInt 0)
+        (* The null char (used here to delimit args) *)
+        val null = String.str (Char.chr 0)
+
+        datatype fd = Fd string
+        fun getFd (Fd s) = s
+    in
+        (* Takes a port number and maximum queue length, and returns the fd of a new
+           actively listening socket *)
+        fun listen port qLen =
+            let
+                val _ = Marshalling.n2w2 qLen cbuf 0
+                val c = (ByteString.toRawString cbuf) ^ (Int.toString port)
+                val _ = #(listen) c fdbuf
+            in
+                if Word8Array.sub fdbuf 0 = Word8.fromInt 1
+                    then raise Err
+                    else Fd (Word8Array.substring fdbuf 1 8)
+            end
+
+        (* Takes the fd of an actively listening socket, returns the fd of a connection *)
+        (* Blocks until there is an incoming connection *)
+        fun accept sockfd =
+            let
+                val _ = #(accept) (getFd sockfd) fdbuf
+            in
+                if Word8Array.sub fdbuf 0 = Word8.fromInt 1
+                    then raise Err
+                    else Fd (Word8Array.substring fdbuf 1 8)
+            end
+
+        (* Takes the host as a string, in the format of a domain name or IPv4 address,
+           and port, and integer corresponding to a port number. Returns a fd. *)
+        fun connect host port =
+            let
+                val c = host ^ null ^ (Int.toString port) ^ null
+                val _ = #(connect) c fdbuf
+            in
+                if Word8Array.sub fdbuf 0 = Word8.fromInt 1
+                    then raise Err
+                    else Fd (Word8Array.substring fdbuf 1 8)
+            end
+
+        (* Returns a pretty string for debug printing file descriptors *)
+        val showFD = ByteString.show o ByteString.fromRawString o getFd
+
+
+    (* The following code is adaptped from the TextIO implementation in the
+       basis library. It is stripped of the instream/outstream constructors.
+       The input functions are changed to not make redundant read calls that
+       end up blocking when used on sockets.
+
+       Specifically, the code is adapted from the following commit:
+https://github.com/CakeML/cakeml/commit/b2076e74977d96b0734bd1ab2ae59ef1f91c3004
+       The following licensing information applies to the rest of the code in
+       this file: *)
+(*
+CakeML Copyright Notice, License, and Disclaimer.
+
+Copyright 2013, 2014, 2015, 2016, 2017, 2018 by
+Anthony Fox, Google LLC, Ramana Kumar, Magnus Myreen,
+Michael Norrish, Scott Owens, Yong Kiam Tan, and
+other contributors listed at https://cakeml.org
+
+All rights reserved.
+
+CakeML is free software. Redistribution and use in source and binary forms,
+with or without modification, are permitted provided that the following
+conditions are met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+    * The names of the copyright holders and contributors may not be
+      used to endorse or promote products derived from this software without
+      specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ``AS IS''
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*)
+
+        exception InvalidFD
+
+        local
+            val iobuff = Word8Array.array 2052 (Word8.fromInt 0)
+        in
+            (* Write functions *)
+            local
+                fun writei fd n i =
+                    let val a = Marshalling.n2w2 n iobuff 0
+                        val a = Marshalling.n2w2 i iobuff 2
+                        val a = #(write) fd iobuff in
+                        if Word8Array.sub iobuff 0 = Word8.fromInt 1
+                        then raise InvalidFD
+                        else
+                          let val nw = Marshalling.w22n iobuff 1 in
+                            if nw = 0 then writei fd n i
+                            else nw
+                          end
+                    end
+                fun write fd n i =
+                  if n = 0 then () else
+                    let val nw = writei fd n i in
+                        if nw < n then write fd (n-nw) (i+nw) else () end
+            in
+                fun output fd s =
+                    if s = "" then () else
+                    let val z = String.size s
+                        val n = if z <= 2048 then z else 2048
+                        val fl = Word8Array.copyVec s 0 n iobuff 4
+                        val a = write (getFd fd) n 0 in
+                            output fd (String.substring s n (z-n))
+                    end
+            end
+
+            (* Read functions *)
+            local
+                fun read fd n =
+                    let val a = Marshalling.n2w2 n iobuff 0 in
+                        (#(read) fd iobuff;
+                        if Word8.toInt (Word8Array.sub iobuff 0) <> 1
+                            then Marshalling.w22n iobuff 1
+                            else raise InvalidFD)
+                    end
+
+                fun input fd buff off len =
+                    let fun input0 off len count =
+                        let val nwant = min len 2048
+                            val nread = read fd nwant
+                        in
+                            if nread = 0 then count else
+                            (Word8Array.copy iobuff 4 nread buff off;
+                                if nread < nwant then count+nread else
+                                input0 (off + nread) (len - nread) (count + nread))
+                        end
+                    in input0 off len 0 end
+
+                fun extend_array arr =
+                    let
+                        val len = Word8Array.length arr
+                        val arr' = Word8Array.array (2*len) (Word8.fromInt 0)
+                    in (Word8Array.copy arr 0 len arr' 0; arr') end
+            in
+                fun inputAll fd =
+                    let fun inputAll_aux arr i =
+                            let val len = Word8Array.length arr in
+                                if i < len then
+                                    let
+                                        val nwant = len - i
+                                        val nread = input (getFd fd) arr i nwant
+                                    in
+                                        if nread < nwant then Word8Array.substring arr 0 (i+nread)
+                                        else inputAll_aux arr (i + nread)
+                                    end
+                                else inputAll_aux (extend_array arr) i
+                            end
+                    in inputAll_aux (Word8Array.array 127 (Word8.fromInt 0)) 0 end
+            end
+
+            (* Close function *)
+            fun close fd =
+                let val a = #(close) (getFd fd) iobuff in
+                if Word8Array.sub iobuff 0 = Word8.fromInt 0
+                then () else raise InvalidFD
+            end
+        end
+    end
+end
+(* No external dependencies *)
+
+(* Default Coq *)
+
+datatype nat = O
+             | S nat
+
+fun natToInt n =
+    case n
+     of O => 0
+      | S n' => 1 + natToInt n'
+
+fun natFromInt i = if i < 0
+                   then O
+                   else if i = 0
+                        then O
+                        else S (natFromInt (i - 1))
+
+val natToString = Int.toString o natToInt
+
+fun nat_plus n m =
+    case n of O => m
+            | S n' => S (nat_plus n' m)
+
+fun nat_minus n m =
+    case n of O => O
+            | S n' => case m of O => n
+                              | S m' => (nat_minus n' m')
+
+fun nat_eq n m =
+    case n of O => (case m of O => True | _ => False)
+            | S n' => (case m of S m' => nat_eq n' m' | _ => False)
+
+fun nat_leb n m =
+    case n of O => True
+            | S n' => (case m of S m' => nat_leb n' m' | O => False)
+
+fun nat_compare n m = case (n, m)
+    of (S n', S m') => nat_compare n' m'
+     | (S n', O) => Greater
+     | (O, S m') => Less
+     | (O, O) => Equal
+
+fun nat_length l =
+    case l of
+        [] => O
+      | h::t => S (nat_length t)
+
+val one = S O
+
+(* List functions *)
+fun list_at l (n : nat) =
+    case l of [] => None
+            | h :: t => (case n of O => Some h
+                                 | S n' => list_at t n')
+
+fun listToString l f = String.concat [ "[", listToStringInner l f, "]" ]
+and listToStringInner l f =
+    case l
+     of [] => ""
+      | x::[] => f x
+      | x::xs => String.concat [(f x), ", ", (listToStringInner xs f)]
+
+fun concatWith s l =
+    case l
+     of [] => ""
+      | x::[] => x
+      | x::xs => x ^ s ^ (concatWith s xs)
+
+(* Map functions *)
+
+type ('a, 'b) mymap = ('a * 'b) list
+
+val map_empty = []
+
+fun map_get m x = case m
+                   of [] => None
+                    | ((k,v)::ms) => if k = x then Some v else map_get ms x
+
+fun map_set m k v = (k,v)::m
+
+fun map_dom m = case m
+                 of [] => []
+                  | ((i,a)::ms) => i :: map_dom ms
+
+(* It'd be nice if this could work *)
+(* 'f = 'a -> 'a -> order *)
+(* type ('a, 'b, 'f) map = ('a * 'b) list * 'f *)
+
+(* fun map_empty cmp_f = ([], cmp_f) *)
+
+(* fun map_get m x = *)
+(*     (* case m of *) *)
+(*         (* (m' f) => Map.lookup f *) *)
+(*     let val (m', f) = m *)
+(*     in case m' *)
+(*         of [] => None *)
+(*          | _  => let val m'' = Map.fromList f m' in Map.lookup f x m'' end *)
+(*     end *)
+
+(* fun map_set m i v = let val (m', f) = m *)
+(*                     in let val m'' = Map.fromList f m' *)
+(*                        in let val m''' = Map.toAscList (Map.insert f i v m'') *)
+(*                           in (m''', f) *)
+(*                           end *)
+(*                        end *)
+(*                     end *)
+
+(* fun map_dom m = let val (m', f) = m *)
+(*                 in case m' *)
+(*                     of [] => [] *)
+(*                      | ((i,a)::ms) => i :: map_dom (ms, f) *)
+(*                 end *)
+
+(* Pair functions *)
+fun pair_compare p f1 f2 = let val (p1, p2) = p in
+                               let val fst_cmp = f1 p1 in
+                                   if fst_cmp = Equal
+                                   then f2 p2
+                                   else fst_cmp
+                               end
+                           end
+(* Depends on: CoqDefaults.sml, ByteString.sml*)
+
+(* Copland Language Definition *)
+
+datatype id = Id nat
+
+fun id_compare (Id i) (Id j) = nat_compare i j
+
+fun idToString (Id i) = "Id " ^ natToString i
+
+type pl = nat
+val plToString = natToString
+
+type asp_id = id
+val aspIdToString = idToString
+(* val aspIdToString = Int.toString *)
+
+type arg = string
+fun argToString a = a
+
+datatype sp = ALL
+            | NONE
+
+fun spToString s = case s
+                    of ALL => "ALL"
+                     | NONE => "NONE"
+
+
+datatype t = USM asp_id (arg list)
+           | KIM asp_id pl (arg list)
+           | SIG
+           | HSH
+           | CPY
+           | AT pl t
+           | LN t t
+           | BRS (sp * sp) t t
+           | BRP (sp * sp) t t
+
+fun tToString a =
+    let
+        val concat = concatWith " "
+        fun wrapped a' = String.concat ["(", tToString a', ")"]
+    in
+        case a
+         of USM a al => concat ["USM", aspIdToString a, listToString al argToString]
+          | KIM a p al => concat ["KIM", aspIdToString a, plToString p, listToString al argToString]
+          | SIG => "SIG"
+          | HSH => "HSH"
+          | CPY => "CPY"
+          | AT p a' => concat ["AT", plToString p, wrapped a']
+          | LN a1 a2 => concat ["LN", wrapped a1, wrapped a2]
+          | BRS (s1, s2) a1 a2 => concat ["BRS (", (spToString s1 ^ ", " ^ spToString s2), ") ", wrapped a1, wrapped a2]
+          | BRP (s1, s2) a1 a2 => concat ["BRP (", (spToString s1 ^ ", " ^ spToString s2), ") " , wrapped a1, wrapped a2]
+    end
+
+(* Evidence Values *)
+local type bs = ByteString.bs in
+datatype ev = Mt                              (* Empty evidence *)
+            | U asp_id (arg list) pl bs ev    (* User space measurement *)
+            | K asp_id (arg list) pl pl bs ev (* Kernel measurement *)
+            | G pl ev bs                      (* Signature *)
+            | H pl bs                         (* Hash *)
+            | N pl int bs ev                  (* Nonce *)
+            | SS ev ev                        (* Sequence *)
+            | PP ev ev                        (* Parallel *)
+end
+
+fun evToString e =
+    let
+        val concat = concatWith " "
+        fun evToString' ev = String.concat ["(", evToString ev, ")"]
+    in
+        case e
+         of Mt => "Mt"
+          | U i al p bs e' => concat ["U", aspIdToString i,
+                                      listToString al id,
+                                      plToString p,
+                                      ByteString.show bs,
+                                      evToString' e']
+          | K i al p1 p2 bs e' => concat ["K", aspIdToString i,
+                                          listToString al id,
+                                          plToString p1,
+                                          plToString p2,
+                                          ByteString.show bs,
+                                          evToString' e']
+          | G p e' bs => concat ["G", plToString p, evToString' e', ByteString.show bs]
+          | H p bs => concat ["H", plToString p, ByteString.show bs]
+          | N p index bs e' => concat ["N", plToString p, Int.toString index, ByteString.show bs, evToString' e']
+          | SS e1 e2 => concat ["SS", evToString' e1, evToString' e2]
+          | PP e1 e2 => concat ["PP", evToString' e1, evToString' e2]
+    end
+
+fun encodeEv (e : ev) =
+    case e
+     of Mt => ByteString.empty
+      | U _ _ _ bs ev => ByteString.append bs (encodeEv ev)
+      | K _ _ _ _ bs ev => ByteString.append bs (encodeEv ev)
+      | G _ ev bs => ByteString.append bs (encodeEv ev)
+      | H _ bs => bs
+      | N _ _ bs ev => ByteString.append bs (encodeEv ev)
+      | SS ev1 ev2 => ByteString.append (encodeEv ev1) (encodeEv ev2)
+      | PP ev1 ev2 => ByteString.append (encodeEv ev1) (encodeEv ev2)
+(* Depends on: CoplandLang.sml, ByteString.sml, crypto/Random.sml, and
+   crypto/CryptoFFI.sml*)
+
+val genHash = Crypto.hash o encodeEv
+
+fun readFile filename =
+    let val fd = TextIO.openIn filename
+        val text = TextIO.inputAll fd
+     in TextIO.closeIn fd;
+        text
+    end
+
+val genFileHash = Crypto.hashStr o readFile
+
+(* Gets a 128 bit (16 byte) nonce *)
+val genNonce = rand
+
+val signEv = Crypto.signMsg o encodeEv
+
+fun verifySig g pubMod pubExp =
+    case g
+      of G _ ev bs => Some (Crypto.sigCheck bs (encodeEv ev) pubMod pubExp)
+       | _ => None
+(* Depends on: CoplandLang.sml *)
+
+type address = string
+
+(* Nameserver mapping *)
+type nsMap = ((pl, address) map)
+val emptyNsMap : nsMap = Map.empty nat_compare
+
+(* To place,
+   From place,
+   Nameserver mapping,
+   Term to execute,
+   Initial evidence *)
+datatype requestMessage = REQ pl pl nsMap t ev
+
+(* To place,
+   From place,
+   Gathered evidence *)
+datatype responseMessage = RES pl pl ev
+(*---------------------------------------------------------------------------*)
+(* Type of Json expressions plus parser. Does not yet handle floating point  *)
+(* numbers, or utf-8 strings.                                                *)
+(*---------------------------------------------------------------------------*)
+
+structure Json =
+struct
+
+(* type substring = String.substring *)
+
+exception ERR string string
+
+fun fst p = case p of (x,y) =>  x
+fun snd p = case p of (x,y) =>  y
+
+fun eRR_MESG pair = print (fst pair^": "^snd pair)
+
+datatype number
+   = Int int
+   (* | Float of real (* Not totally sure about exact representation desired *) *) (* There are no floating points in CakeML *)
+
+datatype json
+    = Null
+    | LBRACK  (* stack symbol only *)
+    | LBRACE  (* stack symbol only *)
+    | Boolean bool
+    | Number number     (* ints and floats *)
+    | String string     (* should be unicode strings, per JSON spec *)
+    | List (json list)
+    | AList ((string * json) list)
+
+fun print_json js t =
+    case js
+     of LBRACK => "LBRACK"
+      | LBRACE => "LBRACE"
+      | Boolean b => String.concat ["\"", if b then "True" else "False", "\""]
+      | Number (Int n) => Int.toString n
+      | String s => String.concat ["\"",s,"\""]
+      | List js' => String.concat ["[\n", print_json_list js' (t + 1), "]"]
+      | AList js' => String.concat ["{\n", print_json_alist js' (t + 1), "\n}"]
+
+and print_json_list js t =
+	case js
+	 of [] => ""
+      | [j] => print_json j t
+	  | (j::js') => String.concat [print_json j t, ", ", print_json_list js' t]
+
+and print_json_alist js t =
+	let
+		val spacing = String.concat (List.tabulate t (fn x => "  "))
+	in
+		case js
+		 of [] => ""
+		  | [(s,j)] => String.concat [spacing, "\"", s, "\" : ", print_json j t, ""]
+		  | ((s,j)::js') => String.concat [spacing, "\"", s, "\" : "
+		                                  , print_json j t, ",\n", print_json_alist js' t]
+    end
+
+
+(*---------------------------------------------------------------------------*)
+(* Lexer                                                                     *)
+(*---------------------------------------------------------------------------*)
+
+
+datatype lexeme
+  = Lbrace
+  | Rbrace
+  | Lbrack
+  | Rbrack
+  | Colon
+  | Comma
+  | NullLit
+  | BoolLit bool
+  | NumLit number
+  | StringLit string
+
+fun isEmpty s = s = ""
+
+fun isDigit c = let val x = Char.ord c in x > 47 andalso x < 58 end
+
+fun isAlpha c = let val x = Char.ord c in (x > 64 andalso x < 91) orelse (x > 96 andalso x < 123) end
+
+fun getc strm =
+    let
+        val lstr = String.explode strm
+    in
+        case lstr
+         of [] => None
+         | x::xs => Some (x, String.implode xs)
+    end
+
+fun takeWhile prop ss =
+    let
+        val (ls, ss') = String.split prop ss
+    in
+        if isEmpty ls
+        then None
+        else Some (ls, ss')
+    end
+
+fun compose f opt =
+    case opt of
+        None => None
+      | Some (x,y) => f x y
+
+fun getNum ss =
+    let fun toInt s =
+            if s = ""
+            then None
+            else if String.sub s 0 = #"-"
+                 then (case Int.fromString (String.extract s 1 None)
+                        of Some i => Some (Int.~(i))
+                        |  None => None)
+                 else Int.fromString s
+    in compose
+           (fn s => fn ss' =>
+               case toInt s
+                of Some i => Some (NumLit (Int i),ss')
+                |  None => None)
+           (takeWhile (fn c => isDigit c orelse c = #"-") ss)
+    end
+
+
+fun getKeyword ss =
+ compose (fn s => fn ss' =>
+   case s
+    of "null"  => Some (NullLit,ss')
+     | "True"  => Some (BoolLit True, ss')
+     | "False" => Some (BoolLit False, ss')
+     |  other  => None)
+  (takeWhile isAlpha ss);
+
+fun getString strm list =
+    case getc strm
+     of None => raise ERR "lex (in getString)" "end of input, looking for \""
+      | Some (#"\"",strm') => Some (StringLit (String.implode(List.rev list)), strm')
+      | Some (#"\\",strm') => (* backslashed chars possible *)
+          (case getc strm'
+            of None => raise ERR "lex (in getString)" "unexpected end of input"
+             | Some (ch,strm'') => getString strm'' (ch :: #"\\"::list)
+          )
+      | Some (ch,strm') =>  getString strm' (ch :: list)
+
+fun lex strm =
+    case getc strm
+     of None => None
+      | Some (#"{",strm') => Some (Lbrace,strm')
+      | Some (#"}",strm') => Some (Rbrace,strm')
+      | Some (#"[",strm') => Some (Lbrack,strm')
+      | Some (#"]",strm') => Some (Rbrack,strm')
+      | Some (#",",strm') => Some (Comma,strm')
+      | Some (#":",strm') => Some (Colon,strm')
+      | Some (#"n",strm') => getKeyword strm  (* null *)
+      | Some (#"t",strm') => getKeyword strm  (* True *)
+      | Some (#"f",strm') => getKeyword strm  (* False *)
+      | Some (#"\"",strm') => getString strm' []
+      | Some (ch,strm') =>
+        if Char.isSpace ch
+        then lex strm'
+        else if isDigit ch orelse ch = #"-"
+             then getNum strm
+	           else raise ERR "lex"
+		               ("unexpected character starts remaining input:\n" ^ strm)
+
+fun lexemes ss =
+  (case lex ss
+    of None => []
+     | Some(l,ss') => l::lexemes ss')
+  handle ERR f s =>
+	 (eRR_MESG ("lexemes",f^": "^s);
+          []);
+
+
+(* let _ = lexemes "null [ \"foo\" : \"bar\" ]" *)
+(* lexemes "{ \"foo\" : 12, \"bar\" : 13  }"; *)
+(* lexemes "[True,False, null, 123, -23, \"foo\"] "; *)
+
+
+(* --------------------------------------------------------------------------- *)
+(* Parsing *)
+(* --------------------------------------------------------------------------- *)
+
+fun pARSE_ERR s ss =
+ let
+     val estring = String.concat ["Json parser failed!\n   ", s
+                                  ,"\n   Remaining input: ", ss, ".\n"]
+ in
+     raise ERR "PARSE_ERR" estring
+ end
+
+fun toList p acc = case p
+                    of (LBRACK::t,ss) => (List acc::t,ss)
+                    |  (h::t,ss) => toList (t,ss) (h::acc)
+                    |  ([],ss) =>
+                       raise pARSE_ERR "toList: empty stack when trying to build a compound" ss
+
+fun toAList p acc = case p
+                    of (LBRACE::t,ss) => (AList acc::t,ss)
+                     | (j::(String s)::t,ss) => toAList (t,ss) ((s,j)::acc)
+                     | (_::_::_,ss) =>
+                       raise pARSE_ERR "toAList: expected string literal in key-value pair" ss
+                     | ([_],ss) =>
+                       raise pARSE_ERR "toAList: unexpected key-value pair structure" ss
+                     | ([],ss) =>
+                       raise pARSE_ERR "toAList: empty stack when trying to build an object" ss
+
+(*---------------------------------------------------------------------------*)
+(* The main parsing loop. Returns the final stack and the remaining input.   *)
+(* The stack should be of length 1, and it will have a json element. The     *)
+(* remaining input should be empty, or consist of whitespace.                *)
+(*---------------------------------------------------------------------------*)
+fun dropl f s =
+    let
+        val (_, s') = String.split f s
+    in
+        s'
+    end
+
+fun parse p =
+    case p
+     of (stk,ss) =>
+        case lex ss
+         of None => (List.rev stk, dropl Char.isSpace ss)
+          | Some (NullLit,ss')     => (Null::stk,ss')
+          | Some (BoolLit b,ss')   => (Boolean b::stk,ss')
+          | Some (NumLit i,ss')    => (Number i::stk,ss')
+          | Some (StringLit s,ss') => (String s::stk,ss')
+          | Some (Lbrack,ss') => parse_list (LBRACK::stk,ss')
+          | Some (Lbrace,ss') => parse_alist (LBRACE::stk,ss')
+          | Some other  => raise pARSE_ERR "unexpected lexeme" ss
+    and
+    parse_list p = (* list --> eps | elt (, elts)* *)
+    case p
+     of (stk,ss) =>
+            case lex ss
+             of None => raise pARSE_ERR "parse_list: unexpected end of input" ss
+              | Some (Rbrack,ss') => toList (stk,ss') []
+              | Some other => elts (stk,ss)
+    and
+    parse_alist p = (* alist --> eps | strLit : val (, strLit : val)* *)
+    case p
+     of (stk,ss) =>
+        case lex ss
+         of None => raise pARSE_ERR "parse_alist: unexpected end of input" ss
+          | Some (Rbrace,ss') => toAList (stk,ss') []
+          | Some (StringLit _,_) => bindings (stk,ss)
+          | other => raise pARSE_ERR "parse_alist: unexpected lexeme" ss
+    and
+    elts p =
+    case p
+     of (stk,ss) =>
+        let val (stk',ss') = parse (stk,ss)
+        in case lex ss'
+            of Some (Comma,ss'') => elts (stk',ss'')
+             | Some (Rbrack,ss'') => toList (stk',ss'') []
+             | Some other => raise pARSE_ERR "parse_list: unexpected lexeme" ss'
+             | None => raise pARSE_ERR "parse_list: unexpected end of input" ss'
+        end
+    and
+    bindings p =
+    case p
+     of (stk,ss) =>
+        case lex ss
+         of Some (StringLit s,ss') =>
+            (case lex ss'
+              of Some (Colon, ss'') =>
+	               let val (stk',ss3) = parse (String s::stk,ss'')
+                 in case lex ss3
+	                   of Some (Comma,ss4) => bindings (stk',ss4)
+		                  | Some (Rbrace,ss4) => toAList (stk',ss4) []
+                      | other => raise pARSE_ERR "parse_alist: unexpected lexeme" ss3
+	               end
+	             | other => raise pARSE_ERR
+			                          "parse_alist: expect a colon after a string literal" ss'
+            )
+          | other => raise pARSE_ERR "parse_alist: expected a key-value pair" ss
+
+fun parseMany p =
+    let
+        val (bs, ss') = parse p
+    in
+        if (isEmpty ss')
+        then bs
+        else case bs
+              of [] => parseMany ([], ss')
+               | [al]  => al::(parseMany ([], ss'))
+               | als => List.concat [als, (parseMany ([], ss'))]
+    end
+
+(* simple tests. *)
+(* val _ = parse ([], "") *)
+(* val _ = print "I did not fail\n" *)
+(* val _ = parse ([], "     ") *)
+(* val _ = print "I also did not fail\n" *)
+(* val _ = parse ([], "[1, 23, 4]"); *)
+(* parse ([], "{\"foo\" : 1, \"bar\" : 2}"); *)
+(* parse ([], "{\"foo\" : [1, 23, 4], \"bar\" : 2}"); *)
+
+(*---------------------------------------------------------------------------*)
+(* Wrapped-up versions ready to use on a variety of types (substrings,       *)
+(* strings, and files). These return (json list * substring)                 *)
+(*---------------------------------------------------------------------------*)
+
+(* fun fromSubstring ss = parse ([], ss); *)
+(* We don't have substring *)
+(* val fromString = fromSubstring o Substring.full; *)
+
+fun fromFile filename =
+ let
+     val istrm = TextIO.openIn filename
+     val ss = TextIO.inputAll istrm
+     val _ = TextIO.closeIn istrm
+ in
+     parse ([], ss)
+ end
+
+fun fromFileMany filename =
+    let
+        val istrm = TextIO.openIn filename
+        val ss = TextIO.inputAll istrm
+        val _ = TextIO.closeIn istrm
+    in
+        ((parseMany ([], ss)), "")
+    end
+end
+
+(* ******************************* *)
+
+structure CoplandToJson =
+struct
+
+fun intToJson n = Json.Number (Json.Int n)
+
+fun stringToJson s = Json.String s
+
+fun stringListToJsonList args  =  Json.List (List.map stringToJson args)
+
+fun byteStringToJson bs = Json.String (ByteString.toHexString bs)
+
+fun aspidToJson (Id a) = Json.Number (Json.Int (natToInt a))
+
+fun placeToJson pl = Json.Number (Json.Int (natToInt pl))
+
+fun spPairToJson (sp1, sp2) = Json.List [ Json.String  (spToString sp1), Json.String (spToString sp2)]
+
+fun nsMapToJson map =
+    let fun jsonify (pl, addr) = (plToString pl, Json.String addr)
+     in Json.AList (List.map jsonify (Map.toAscList map))
+    end
+
+fun noArgConstructor cName = Json.AList [("constructor", stringToJson cName )]
+
+fun constructorWithArgs cName arglist = Json.AList [("constructor", stringToJson cName),
+                                                    ("data", Json.List arglist)]
+
+fun apdtToJson term =
+    case term
+     of KIM aspid pl args => constructorWithArgs "KIM" [ aspidToJson aspid, placeToJson pl, stringListToJsonList args]
+      | USM aspid args => constructorWithArgs "USM"  [ aspidToJson aspid, stringListToJsonList args]
+      | SIG => noArgConstructor "SIG"
+      | HSH => noArgConstructor "HSH"
+      | AT pl t1 => constructorWithArgs "AT" [ placeToJson pl, apdtToJson t1]
+      | LN t1 t2 =>  constructorWithArgs "LN" [ apdtToJson t1, apdtToJson t2]
+      | BRS p t1 t2 => constructorWithArgs "BRS" [spPairToJson p, apdtToJson t1, apdtToJson t2]
+      | BRP p t1 t2=>  constructorWithArgs "BRP" [spPairToJson p, apdtToJson t1, apdtToJson t2]
+      |  _ =>  raise  Json.ERR "apdtToJson" "Unexpected constructor for APDT term: "
+
+fun evidenceToJson evidence =
+    case evidence
+     of Mt => noArgConstructor "Mt"
+     | U aspid args pl bs ev =>  constructorWithArgs "U" [ aspidToJson aspid, stringListToJsonList args, placeToJson pl, byteStringToJson bs, evidenceToJson ev]
+     | K aspid args pl1 pl2 bs ev =>  constructorWithArgs "K" [ aspidToJson aspid, stringListToJsonList args, placeToJson pl1, placeToJson pl2,  byteStringToJson bs, evidenceToJson ev]
+     | G pl ev bs => constructorWithArgs "G" [placeToJson pl, evidenceToJson ev, byteStringToJson bs]
+     | H pl bs => constructorWithArgs "H" [placeToJson pl, byteStringToJson bs]
+     | N pl index bs ev => constructorWithArgs "N" [placeToJson pl, Json.Number (Json.Int index), byteStringToJson bs, evidenceToJson ev]
+     | SS ev1 ev2 => constructorWithArgs "SS" [evidenceToJson ev1, evidenceToJson ev2]
+     | PP ev1 ev2 => constructorWithArgs "PP" [evidenceToJson ev1, evidenceToJson ev2]
+     |  _ =>  raise  Json.ERR "evidenceToJson" "Unexpected constructor for Evidence term: "
+
+fun requestToJson (REQ pl1 pl2 map t ev) = Json.AList
+    [("toPlace", placeToJson pl1), ("fromPlace", placeToJson pl2), ("reqNameMap", nsMapToJson map),
+     ("reqTerm", apdtToJson t), ("reqEv", evidenceToJson ev)]
+
+fun responseToJson (RES pl1 pl2 ev) = Json.AList
+    [("respToPlace", placeToJson pl1), ("respFromPlace", placeToJson pl2), ("respEv", evidenceToJson ev)]
+
+end
+
+(* ******************************* *)
+
+fun stringToSp n =
+    case n
+    of  "ALL" => ALL
+    |   "NONE" => NONE
+
+fun jsonStringToString (Json.String s) = s
+fun jsonStringListToList (Json.List args)  = List.map jsonStringToString args
+
+fun jsonStringToBS (Json.String s) = ByteString.fromHexString s
+
+
+structure JsonToCopland =
+struct
+
+(* json object to apdt object *)
+fun jsonToApdt js =
+    case js
+     of Json.AList js' => fromAList js'
+      | _ =>  raise  Json.ERR "jsonToApdt" "APDT term does not begin as an AList"
+
+      and
+    fromAList pairs =
+    case pairs
+     of [("constructor", constructorVal)] => handleNullConstructor constructorVal
+      |  [("constructor", constructorVal), ("data", args)] => handleConstructorWithArgs constructorVal args
+      |  [("data", args),  ("constructor", constructorVal)]  => handleConstructorWithArgs constructorVal args
+      | _ =>  raise  Json.ERR "fromAList" "does not contain just constructor and data pairs"
+
+      and
+    handleNullConstructor (Json.String constructor) =
+    case constructor
+     of "SIG" => SIG
+     |  "HSH" =>  HSH
+     | _ => raise Json.ERR "handleNullConstructor"  (String.concat ["Unexpected Null constructor for APDT term: ", constructor])
+
+    and
+    handleConstructorWithArgs (Json.String constructor) (Json.List args) =
+        case constructor
+         of "KIM" => getKIM args
+         | "USM" =>  getUSM args
+         | "AT"  =>  getAT args
+         | "LN"  =>  getLN args
+         | "BRS" =>  getBRS args
+         | "BRP" =>  getBRP args
+         |  _ =>  raise  Json.ERR "handleConstructorWithArgs" (String.concat ["Unexpected constructor for APDT term: ", constructor])
+
+      and
+    getKIM data =
+    case data
+     of [ Json.Number (Json.Int aspId), Json.Number (Json.Int place), args] =>
+             KIM (Id (natFromInt aspId)) (natFromInt place) (jsonStringListToList args)
+      | _ => raise  Json.ERR "getKIM" "unexpected argument list"
+
+      and
+    getUSM data =
+    case data
+     of [ Json.Number (Json.Int aspId), args] => USM (Id (natFromInt aspId)) (jsonStringListToList args)
+      | _ => raise  Json.ERR "getUSM" "unexpected argument list"
+
+    and
+    getAT data =
+    case data
+     of [ Json.Number (Json.Int place), term] => AT (natFromInt place) (jsonToApdt term)
+      | _ => raise  Json.ERR "getAT" "unexpected argument list"
+
+    and
+    getLN data =
+    case data
+     of [term1, term2] => LN (jsonToApdt term1) (jsonToApdt term2)
+      | _ => raise  Json.ERR "getLN" "unexpected argument list"
+
+    and
+    getBRS data =
+    case data
+     of [ Json.List [ (Json.String sp1), (Json.String sp2)], term1, term2] =>
+     BRS (stringToSp sp1, stringToSp sp2) (jsonToApdt term1) (jsonToApdt term2)
+      | _ => raise  Json.ERR "getBRS" "unexpected argument list"
+    and
+    getBRP data =
+    case data
+     of [ Json.List [ (Json.String sp1), (Json.String sp2)], term1, term2] =>
+     BRP (stringToSp sp1, stringToSp sp2) (jsonToApdt term1) (jsonToApdt term2)
+      | _ => raise  Json.ERR "getBRP" "unexpected argument list"
+
+(* json object to ev object *)
+fun jsonToEvidence js =
+    case js
+     of Json.AList js' => fromAList js'
+      | _ =>  raise  Json.ERR "JsonToEvidence" "APDT Evidence does not begin as an AList"
+
+      and
+    fromAList pairs =
+    case pairs
+     of [("constructor", constructorVal)] => handleNullConstructor constructorVal
+     |  [("constructor", constructorVal), ("data", args)] => handleConstructorWithArgs constructorVal args
+     |  [("data", args),  ("constructor", constructorVal)]  => handleConstructorWithArgs constructorVal args
+     | _ =>  raise  Json.ERR "fromAList" "does not contain just constructor and data pairs"
+
+    and
+    handleNullConstructor (Json.String constructor) =
+    case constructor
+     of "Mt" => Mt
+     | _ => raise Json.ERR "handleNullConstructor"  (String.concat ["Unexpected Null constructor for APDT Evidence: ", constructor])
+
+    and
+    handleConstructorWithArgs (Json.String constructor) (Json.List args) =
+    case constructor
+     of "K" => getK args
+     | "U" =>  getU args
+     | "G" =>  getG args
+     | "H" =>  getH args
+     | "N" =>  getN args
+     | "SS"  =>  getSS args
+     | "PP" =>  getPP args
+     |  _ =>  raise  Json.ERR "handleConstructorWithArgs" (String.concat ["Unexpected constructor for APDT Evidence: ", constructor])
+
+    and
+    getK data =
+    case data
+     of [ Json.Number (Json.Int aspId), args, Json.Number (Json.Int place1), Json.Number (Json.Int place2), bs, ev] =>
+           K (Id (natFromInt aspId))  (jsonStringListToList args) (natFromInt place1) (natFromInt place2) (jsonStringToBS bs) (jsonToEvidence ev)
+     | _ => raise  Json.ERR "getK" "unexpected argument list"
+
+    and
+    getU data =
+    case data
+     of [ Json.Number (Json.Int aspId), args, Json.Number (Json.Int place), bs, ev] =>
+           U (Id (natFromInt aspId)) (jsonStringListToList args) (natFromInt place) (jsonStringToBS bs) (jsonToEvidence ev)
+     | _ => raise  Json.ERR "getU" "unexpected argument list"
+
+    and
+    getG data =
+    case data
+     of [ Json.Number (Json.Int place), ev, bs] =>
+            G (natFromInt place) (jsonToEvidence ev) (jsonStringToBS bs)
+     | _ => raise  Json.ERR "getG" "unexpected argument list"
+
+    and
+    getH data =
+    case data
+     of [ Json.Number (Json.Int place), bs] => H (natFromInt place) (jsonStringToBS bs)
+     | _ => raise  Json.ERR "getH" "unexpected argument list"
+
+    and
+    getN data =
+    case data
+     of [ Json.Number (Json.Int place), Json.Number (Json.Int index), bs, ev] =>
+           N (natFromInt place) index (jsonStringToBS bs) (jsonToEvidence ev)
+     | _ => raise  Json.ERR "getN" "unexpected argument list"
+
+    and
+    getSS data =
+    case data
+     of [ev1, ev2] => SS  (jsonToEvidence ev1)  (jsonToEvidence ev2)
+     | _ => raise  Json.ERR "getSS" "unexpected argument list"
+
+    and
+    getPP data =
+    case data
+     of [ev1, ev2] => PP  (jsonToEvidence ev1)  (jsonToEvidence ev2)
+     | _ => raise Json.ERR "getPP" "unexpected argument list"
+
+fun jsonToRequest js =
+    case js
+      of Json.AList js' => fromAList js'
+       | _ => raise Json.ERR "JsonToRequest" "Request message does not begin as an AList"
+
+    and
+    fromAList pairs =
+        let fun get str = case Alist.lookup pairs str
+                            of Some x => x
+                             | None => raise Json.ERR "fromAList" "missing request field"
+         in getREQ (List.map get ["toPlace", "fromPlace", "reqNameMap", "reqTerm", "reqEv"])
+        end
+
+    and
+    getREQ data =
+        case data
+          of [Json.Number (Json.Int pl1), Json.Number (Json.Int pl2), Json.AList alist, t, ev] =>
+                 REQ (natFromInt pl1) (natFromInt pl2) (toPlAddrMap alist) (jsonToApdt t) (jsonToEvidence ev)
+           | _ => raise Json.ERR "getREQ" "unexpected argument list"
+
+    and
+    toPlAddrMap alist =
+        let fun unjasonify (s, Json.String s') =
+                case Int.fromString s
+                  of Some i => (natFromInt i, s')
+                   | _ => raise Json.ERR "toPlAddrMap" "unexpected non-integer"
+         in Map.fromList nat_compare (List.map unjasonify alist)
+        end
+
+fun jsonToResponse js =
+    case js
+      of Json.AList js' => fromAList js'
+       | _ => raise Json.ERR "JsonToResponse" "Response message does not begin as an AList"
+
+    and
+    fromAList pairs =
+        let fun get str = case Alist.lookup pairs str
+                            of Some x => x
+                             | None => raise Json.ERR "fromAList" "missing request field"
+         in getRES (List.map get ["respToPlace", "respFromPlace", "respEv"])
+        end
+
+    and
+    getRES data =
+        case data
+          of [Json.Number (Json.Int pl1), Json.Number (Json.Int pl2), ev] =>
+                 RES (natFromInt pl1) (natFromInt pl2) (jsonToEvidence ev)
+           | _ => raise Json.ERR "getRES" "unexpected argument list"
+
+end
+(* Depends on: SocketFFI.sml, Json.sml, CommTypes.sml, JsonToCopland.sml,
+               CoplandToJson.sml, and CoplandLang.sml *)
+
+fun strToJson str = List.hd (fst (Json.parse ([], str)))
+fun jsonToStr js  = Json.print_json js 0
+
+fun serverSend fd = Socket.output fd o jsonToStr o CoplandToJson.requestToJson
+
+val serverRcv = JsonToCopland.jsonToResponse o strToJson o Socket.inputAll
+
+fun serverEval fd req = Some (serverSend fd req; serverRcv fd)
+    handle Socket.Err     => (TextIO.print_err "Socket error\n"; None)
+         | Json.ERR s1 s2 => (TextIO.print_err ("JSON error: "^s1^": "^s2^"\n"); None)
+
+
+exception DispatchErr string
+
+fun dispatchAt req =
+    let val (REQ _ pl map _ _) = req
+        val addr = case Map.lookup map pl
+                     of Some a => a
+                      | None => raise DispatchErr ("No address associated with place "^(plToString pl))
+        val fd = Socket.connect addr 50000
+        val (RES _ _ ev) = (serverSend fd req; serverRcv fd)
+     in Socket.close fd;
+        ev
+    end
+(* Depends on: CoplandLang.sml, CoqDefaults.sml, ByteString.sml, and Measurements.sml*)
+
+type pubKey = nat
+type privKey = nat
+
+type platform = pubKey * privKey
+type system = platform list
+
+val public = fst
+val private = snd
+
+fun platforms s = List.map public s
+
+fun splitEv s e =
+    case s
+      of ALL => e
+       | NONE => Mt
+
+exception USMexpn id
+exception KIMexpn id
+
+val emptyUSM : (id, string list -> ByteString.bs) mymap = map_empty
+val emptyKIM : (id, nat -> string list -> ByteString.bs) mymap = map_empty
+
+val mapUSM =
+    let fun hashFileUSM args =
+            case args
+              of [fileName] => genFileHash fileName
+               | _ => raise USMexpn (Id O)
+     in map_set emptyUSM (Id O) hashFileUSM
+    end
+
+val mapKIM = emptyKIM
+
+fun measureUsm map id args =
+    case map_get map id
+     of None => raise USMexpn id
+      | Some f => f args
+
+fun measureKim map id p args =
+    case map_get map id
+     of None => raise KIMexpn id
+      | Some f => f p args
+
+
+(* May raise USMexpn, KIMexpn, DispatchErr, Json.ERR, or Socket.Err *)
+(* I'd love to refactor the various exceptions into a Result/Either type,
+   but without do notation, infix ops, or typeclasses, monads become
+   pretty unwieldy :( *)
+fun eval pl map ev t =
+    let val evalRec = eval pl map
+     in case t
+          of USM id args => U id args pl (measureUsm mapUSM id args) ev
+           | KIM id pl' args => K id args pl pl' (measureKim mapKIM id pl args) ev
+           | SIG => G pl ev (signEv ev)
+           | HSH => H pl (genHash ev)
+           | CPY => ev
+           | AT pl' t' => dispatchAt (REQ pl pl' map t' ev)
+           | LN t1 t2 => evalRec (evalRec ev t1) t2
+           | BRS (s1, s2) t1 t2 => SS (evalRec (splitEv s1 ev) t1) (evalRec (splitEv s2 ev) t2)
+           | BRP (s1, s2) t1 t2 => PP (evalRec (splitEv s1 ev) t1) (evalRec (splitEv s2 ev) t2)
+    end
+(* Depends on: SocketFFI.sml, Json.sml, JsonToCopland.sml, CoplandToJson.sml,
+               CommTypes.sml, CommUtil.sml and Eval.sml *)
+
+(* TODO: Do something with pl1 rather than assuming it is here.
+   Also do something with the nameserver mapping *)
+(* When things go well, this returns a JSON evidence string. When they go wrong,
+   it returns a raw error message string. In the future, we may want to wrap
+   said error messages in JSON as well to make it easier on the client. *)
+fun evalJson s =
+    let val (REQ pl1 pl2 map t ev) = JsonToCopland.jsonToRequest (strToJson s)
+        val ev' = eval pl2 map ev t
+        val response = RES pl2 pl1 ev'
+     in jsonToStr (CoplandToJson.responseToJson response)
+    end
+    handle Json.ERR s1 s2 => (TextIO.print_err ("JSON error"^s1^": "^s2^"\n");
+                              "Invalid JSON/Copland term")
+         | USMexpn (Id n) => "Invalid USM id: "^(natToString n)^"\n"
+         | KIMexpn (Id n) => "Invalid KIM id: "^(natToString n)^"\n"
+
+
+fun respondToMsg client = Socket.output client (evalJson (Socket.inputAll client))
+
+fun handleIncoming listener =
+    let val client = Socket.accept listener
+     in respondToMsg client;
+        Socket.close client
+    end
+    handle Socket.Err       => TextIO.print_err "Socket failure\n"
+         | Socket.InvalidFD => TextIO.print_err "Invalid file descriptor\n"
+
+(* I'm almost certain this leaks memory. *)
+fun startServer port qLen =
+    let fun loop f x = (f x; loop f x)
+     in loop handleIncoming (Socket.listen port qLen)
+    end
+    handle Socket.Err => TextIO.print_err "Socket failure on listener instantiation\n"
+         | _          => TextIO.print_err "Fatal: unknown error\n"
+
+fun serverHelper = startServer 50000 5
+
+(*
+fun main () =
+    let val usage = "Usage: ./server portNumber queueLength\ne.g.   ./server 50000 5\n"
+     in case CommandLine.arguments ()
+          of [portStr, qLenStr] => (
+             case (Int.fromString portStr, Int.fromString qLenStr)
+               of (Some port, Some qLen) => startServer port qLen
+                | _ => TextIO.print_err usage)
+           | _ => TextIO.print_err usage
+    end
+
+val _ = main ()
+*)
+
