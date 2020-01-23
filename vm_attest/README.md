@@ -1,3 +1,11 @@
+Cake branch To-do (any one of the following):
+* call into cakeml from C
+* gain component "control" from cakeml
+
+See this for an example of the latter option:
+https://github.com/seL4/camkes/blob/master/apps/cakeml_tipc/components/cakeml-filter/componentScript.sml
+
+------------------
 
 This projects builds off of the example application "Virtio Net Demo" described below.
 
