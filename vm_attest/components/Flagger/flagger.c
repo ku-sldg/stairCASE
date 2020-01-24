@@ -42,6 +42,22 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
+int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
+{
+    void *buf = NULL;
+    int err = camkes_virtqueue_buffer_alloc(&destination, &buf, outgoing_data_size);
+    if (err) {
+        return -1;
+    }
+    memcpy(buf, outgoing_data, outgoing_data_size);
+    if (camkes_virtqueue_driver_send_buffer(&destination, buf, outgoing_data_size) != 0) {
+        camkes_virtqueue_buffer_free(&destination, buf);
+        return -1;
+    }
+    destination.notify();
+    return 0;
+}
+
 void flag_packet(char* packet, size_t packet_size)
 {
     // always forward to am for now
@@ -65,22 +81,6 @@ void flag_packet(char* packet, size_t packet_size)
     ZF_LOGE("Got a packet, sending to AM...");
     send_outgoing_packet( packet, packet_size, am_send_virtqueue );
     return;
-}
-
-int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
-{
-    void *buf = NULL;
-    int err = camkes_virtqueue_buffer_alloc(&destination, &buf, outgoing_data_size);
-    if (err) {
-        return -1;
-    }
-    memcpy(buf, outgoing_data, outgoing_data_size);
-    if (camkes_virtqueue_driver_send_buffer(&destination, buf, outgoing_data_size) != 0) {
-        camkes_virtqueue_buffer_free(&destination, buf);
-        return -1;
-    }
-    destination.notify();
-    return 0;
 }
 
 void print_ip_packet(void *ip_buf, size_t ip_length)

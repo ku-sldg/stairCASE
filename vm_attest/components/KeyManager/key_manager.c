@@ -37,13 +37,6 @@ virtqueue_driver_t am_send_virtqueue;
 void handle_am_recv_callback(virtqueue_device_t *vq);
 void handle_am_send_callback(virtqueue_driver_t *vq);
 
-void issue_key( virtqueue_driver_t destination )
-{
-    // dummy key
-    char* key = "1234512345";
-    send_outgoing_packet( key, 10, destination );
-}
-
 int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtqueue_driver_t destination)
 {
     void *buf = NULL;
@@ -58,6 +51,13 @@ int send_outgoing_packet(char *outgoing_data, size_t outgoing_data_size, virtque
     }
     destination.notify();
     return 0;
+}
+
+void issue_key( virtqueue_driver_t destination )
+{
+    // dummy key
+    char* key = "1234512345";
+    send_outgoing_packet( key, 10, destination );
 }
 
 void print_ip_packet(void *ip_buf, size_t ip_length)
